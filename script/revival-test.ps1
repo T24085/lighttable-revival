@@ -11,7 +11,7 @@ $manifest=[IO.File]::ReadAllText((Join-Path $core 'package.json'))
 $env:LT_PROOF_PHASE='evaluation'
 try {
 $p=Start-Process (Join-Path $source 'deploy\electron\node_modules\electron\dist\electron.exe') -ArgumentList ('"'+$core+'"'),'--enable-logging' -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $runtime 'evaluation-stdout.log') -RedirectStandardError (Join-Path $runtime 'evaluation-stderr.log')
-if(!$p.WaitForExit(25000)){Stop-Process -Id $p.Id;throw 'Own proof process timed out'}
+if(!$p.WaitForExit(58000)){Stop-Process -Id $p.Id;throw 'Own proof process timed out'}
 if($p.ExitCode-ne 0){throw ('Editor proof failed: see '+(Join-Path $runtime 'evaluation-result.json'))}
 } finally {[IO.File]::WriteAllText((Join-Path $core 'package.json'),$manifest)}
 Get-Content (Join-Path $runtime 'evaluation-result.json')

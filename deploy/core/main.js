@@ -30,8 +30,11 @@ var packageJSON = require(__dirname + '/package.json');
 function createWindow() {
     let browserWindowOptions = packageJSON.browserWindowOptions;
     browserWindowOptions.icon = __dirname + '/' + browserWindowOptions.icon;
-    browserWindowOptions.webPreferences={nodeIntegration:false,contextIsolation:true,enableRemoteModule:false,preload:__dirname+'/proof-preload.cjs'};
+    browserWindowOptions.webPreferences={nodeIntegration:false,contextIsolation:true,sandbox:true,enableRemoteModule:false,preload:__dirname+'/proof-preload.cjs'};
     let window = new BrowserWindow(browserWindowOptions);
+    window.webContents.session.setPermissionRequestHandler((_wc,_permission,callback)=>callback(false));
+    window.webContents.session.setPermissionCheckHandler(()=>false);
+    window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
     window.webContents.session.webRequest.onBeforeRequest((details,callback)=>callback({cancel:!details.url.startsWith('file:')&&!details.url.startsWith('data:')}));
     windows[window.id] = window;
     window.focus();
@@ -121,7 +124,7 @@ function parseArgs() {
 
 function start() {
     // Revival proof: do not open a remote debugging listener.
-    app.commandLine.appendSwitch('js-flags', '--harmony');
+
 
     // This method will be called when electron has done everything
     // initialization and ready for creating browser windows.
@@ -175,5 +178,6 @@ start();
 // Asynchronous language execution has its own disposable sandboxed renderer.
 const proofJS=require('./proof-js.cjs');
 function proofSender(event){return event.senderFrame===event.sender.mainFrame&&event.senderFrame.url.startsWith(require('url').pathToFileURL(require('path').join(__dirname,'LightTable.html')).href+'?');}
-ipcMain.handle('proof-javascript',async(event,source)=>{if(!proofSender(event))throw Error('Untrusted evaluation caller');return proofJS.run(event.sender.id,source);});
+const watchedEvaluationOwners=new WeakSet();
+ipcMain.handle('proof-javascript',async(event,source)=>{if(!proofSender(event))throw Error('Untrusted evaluation caller');if(!watchedEvaluationOwners.has(event.sender)){watchedEvaluationOwners.add(event.sender);const owner=event.sender.id;event.sender.once('destroyed',()=>proofJS.cancel(owner));}return proofJS.run(event.sender.id,source);});
 ipcMain.on('proof-javascript-cancel',event=>{if(proofSender(event))proofJS.cancel(event.sender.id);});

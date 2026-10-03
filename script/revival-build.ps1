@@ -14,7 +14,7 @@ $repo=(Join-Path $ToolchainRoot 'm2').Replace('\','/')
 [IO.File]::WriteAllText((Join-Path $env:LEIN_HOME 'profiles.clj'),'{:user {:local-repo "'+$repo+'"}}')
 $cache=Join-Path $ToolchainRoot 'npm-cache'
 foreach($part in 'core','electron'){Push-Location (Join-Path $source ('deploy\'+$part));try{& npm.cmd ci --ignore-scripts --no-audit --no-fund --cache $cache --registry https://registry.npmjs.org;if($LASTEXITCODE-ne 0){throw 'Locked dependency install failed'}}finally{Pop-Location}}
-# Inspected official Electron 13.1.2 installer uses @electron/get with SHA256 validation.
+# Inspected official Electron 44.5.1 installer uses @electron/get with SHA256 validation.
 $env:electron_config_cache=Join-Path $ToolchainRoot 'electron-cache'
 & node (Join-Path $source 'deploy\electron\node_modules\electron\install.js');if($LASTEXITCODE-ne 0){throw 'Official Electron download failed'}
 Push-Location $source;try{& $launcher cljsbuild once app;if($LASTEXITCODE-ne 0){throw 'Original ClojureScript build failed'}}finally{Pop-Location}

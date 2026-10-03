@@ -2,7 +2,7 @@
 window.ltProofUI=(()=>{
 let cm=null,last=null,revision=0,runId=0,pending=Promise.resolve();const panel=document.createElement('aside');panel.id='proof-calculation';panel.style.cssText='position:fixed;right:0;top:40px;bottom:20px;width:310px;padding:22px;box-sizing:border-box;background:#202526;color:#e5ece8;border-left:1px solid #4a5550;z-index:25;font:14px/1.6 Consolas,monospace';
 const title=document.createElement('h3');title.textContent='REVIVAL / CALCULATION';title.style.cssText='font:13px Arial;letter-spacing:2px;color:#9cb9ae';panel.append(title);
-const scope=document.createElement('p');scope.textContent='Run numeric arithmetic or synchronous JavaScript. Every run starts fresh. Async results are unsupported.';scope.style.color='#a7b4ae';panel.append(scope);
+const scope=document.createElement('p');scope.textContent='JavaScript with bounded promises and timers. Every run starts fresh. 1.5 s execution budget. No automatic rerun.';scope.style.color='#a7b4ae';panel.append(scope);
 const controls=document.createElement('div');panel.append(controls);
 const output=document.createElement('div');output.id='proof-output';output.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;margin-top:25px';output.textContent='Open calculation.js to begin.';panel.append(output);
 function editor(){return [...document.querySelectorAll('.CodeMirror')].map(e=>e.CodeMirror).find(c=>c&&c.getWrapperElement().getBoundingClientRect().height>0);}
