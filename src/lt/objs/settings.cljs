@@ -162,7 +162,7 @@
         (object/refresh! (first objs))
         (catch :default e
           (console/error e)))
-      (js/process.nextTick (fn []
+      (js/ltProcess.nextTick (fn []
                              (refresh-all (next objs)))))))
 
 (defn refresh-diffed [diff]

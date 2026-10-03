@@ -1,3 +1,5 @@
+> **Experimental partial revival by The Patch Vigilantes.** Original Light Table source/history preserved. Read [REVIVAL.md](REVIVAL.md) for verified proof, reproduction and limitations. This is not a supported release.
+
 # Light Table
 [![Build Status](https://travis-ci.org/LightTable/LightTable.svg?branch=master)](https://travis-ci.org/LightTable/LightTable)
 [![Build Status](https://semaphoreci.com/api/v1/lighttable/lighttable/branches/master/badge.svg)](https://semaphoreci.com/lighttable/lighttable)

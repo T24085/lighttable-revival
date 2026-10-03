@@ -1,0 +1,21 @@
+'use strict';
+const assert=require('assert/strict'),fs=require('fs'),path=require('path');
+const p=require('../../deploy/core/proof-policy.cjs');
+let checks=0;function check(fn){fn();checks++;}
+check(()=>assert.equal(p.calculate('(12 + 30)').result,42));
+check(()=>assert.equal(p.calculate('(12 + 31)').result,43));
+check(()=>assert.notEqual(p.calculate('(12 + 30)').sha256,p.calculate('(12 + 31)').sha256));
+for(const source of ['process.exit()','require("fs")','globalThis.x=1','fetch("https://example.com")','1;2','1/*comment*/+2','2**1000000','1/0','("x")','1'.repeat(257)])check(()=>assert.throws(()=>p.calculate(source)));
+check(()=>assert.throws(()=>p.operation('read',['C:\\Windows\\win.ini'])));
+check(()=>assert.throws(()=>p.operation('write',[path.join(p.deploy,'core','main.js'),'bad'])));
+check(()=>assert.throws(()=>p.operation('write',[path.join(p.docs,'..','escape.js'),'bad'])));
+check(()=>assert.throws(()=>p.operation('shell',['echo nope'])));
+check(()=>assert.throws(()=>p.operation('write',[path.join(p.docs,'oversized.txt'),'x'.repeat(65537)])));
+check(()=>{const target=path.join(p.docs,'bridge-test.txt');p.operation('write',[target,'verified']);assert.equal(p.operation('read',[target]),'verified');});
+for(const source of ['while(true){}','for(;;){}','Promise.resolve(1)','setTimeout(()=>1,0)','async()=>1','Object.prototype.x=1','globalThis','this.constructor.constructor("return process")()','[].constructor','({}).__proto__','fetch(1)','process.mainModule','import("fs")','1\\u003b2','1e999','NaN','Infinity','1//hi','1/*','1..toString()'])check(()=>assert.throws(()=>p.calculate(source)));
+check(()=>assert.throws(()=>p.calculate('(1 +')));
+check(()=>assert.equal(p.calculate('2 * (3 + 4)').result,14));
+check(()=>assert.equal(p.calculate('-5 + 2').result,-3));
+check(()=>assert.equal(p.calculate('7 % 3').result,1));
+check(()=>assert.equal(p.calculate('0.5 + .25').result,.75));
+console.log(JSON.stringify({passed:checks,calculationA:p.calculate('(12 + 30)'),calculationB:p.calculate('(12 + 31)')},null,2));

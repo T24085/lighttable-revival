@@ -9,7 +9,7 @@
             [clojure.string :as string])
   (:require-macros [lt.macros :refer [behavior]]))
 
-(def remote (.-remote (js/require "electron")))
+(def remote (.-remote (js/ltRequire "electron")))
 (def Menu (.-Menu remote))
 (def MenuItem (.-MenuItem remote))
 

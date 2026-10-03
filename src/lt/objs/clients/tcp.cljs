@@ -9,7 +9,7 @@
   (:require-macros [lt.macros :refer [behavior]]))
 
 (def port 0)
-(def net (js/require "net"))
+(def net (js/ltRequire "net"))
 
 (defn send-to [sock msg]
   (if sock

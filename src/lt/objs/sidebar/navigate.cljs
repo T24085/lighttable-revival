@@ -21,9 +21,9 @@
   (re-seq files/ignore-pattern f))
 
 (def populate-bg (background (fn [obj-id {:keys [lim pattern ws]}]
-                               (let [fs (js/require "fs")
-                                     fpath (js/require "path")
-                                     walkdir (js/require (str js/ltpath "/core/lighttable/background/walkdir2.js"))
+                               (let [fs (js/ltRequire "fs")
+                                     fpath (js/ltRequire "path")
+                                     walkdir (js/ltRequire (str js/ltpath "/core/lighttable/background/walkdir2.js"))
                                      grab-files (fn [all-files folder]
                                                   (let [root-length (inc (count (.dirname fpath folder)))
                                                         walked (walkdir folder (js-obj "filter" (js/RegExp. pattern)

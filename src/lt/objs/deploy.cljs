@@ -20,13 +20,13 @@
                    [lt.macros :refer [behavior defui]]))
 
 (def shell (load/node-module "shelljs"))
-(def fs (js/require "fs"))
-(def zlib (js/require "zlib"))
+(def fs (js/ltRequire "fs"))
+(def zlib (js/ltRequire "zlib"))
 (def request (load/node-module "request"))
 (def tar (load/node-module "tar"))
 (def home-path (files/lt-home ""))
 ;; TODO: get-proxy
-;; (def get-proxy (.-App.getProxyForURL (js/require "nw.gui")))
+;; (def get-proxy (.-App.getProxyForURL (js/ltRequire "nw.gui")))
 (def get-proxy)
 (def request-strict-ssl true)
 
@@ -77,7 +77,7 @@
                         "headers" (js-obj "User-Agent" "Light Table")
                         "strictSSL" request-strict-ssl)
         out (.createWriteStream fs to)]
-    (when-let [proxy (or js/process.env.http_proxy js/process.env.https_proxy)]
+    (when-let [proxy (or js/ltProcess.env.http_proxy js/ltProcess.env.https_proxy)]
       (set! (.-proxy options) proxy))
 
     (-> (.get request options cb)
@@ -163,7 +163,7 @@
   "Binary/electron version. The two versions are in sync since binaries updates
   only occur with electron updates."
   []
-  (aget js/process.versions "electron"))
+  (aget js/ltProcess.versions "electron"))
 
 (defui button [label & [cb]]
        [:div.button.right label]

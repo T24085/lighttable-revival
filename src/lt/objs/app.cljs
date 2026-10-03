@@ -11,9 +11,9 @@
             [lt.util.ipc :as ipc])
   (:require-macros [lt.macros :refer [behavior]]))
 
-(def remote (.-remote (js/require "electron")))
+(def remote (.-remote (js/ltRequire "electron")))
 (def win (.getCurrentWindow remote))
-(def frame (.-webFrame (js/require "electron")))
+(def frame (.-webFrame (js/ltRequire "electron")))
 (def closing true)
 (def default-zoom 1)
 

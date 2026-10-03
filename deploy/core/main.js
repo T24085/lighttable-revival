@@ -12,6 +12,15 @@ let yargs = require('yargs');
 
 // Keep a global reference of the window object, if you don't, the window will
 // be closed automatically when the javascript object is GCed.
+const proofPolicy=require('./proof-policy.cjs');
+app.setPath('userData',require('path').join(proofPolicy.root,'proof-browser-data'));
+ipcMain.on('proof-operation',(event,op,args)=>{
+ try {
+   const trusted=new URL(event.senderFrame.url);if(trusted.protocol!=='file:'||decodeURIComponent(trusted.pathname).replace(/^\//,'').replace(/\//g,'\\').toLowerCase()!==require('path').join(__dirname,'LightTable.html').toLowerCase()||event.senderFrame!==event.sender.mainFrame)throw Error('Untrusted bridge caller');
+   if(op==='window') {const w=BrowserWindow.fromWebContents(event.sender);const [action,params]=args;switch(action){case 'size':event.returnValue={value:w.getSize()};return;case 'position':event.returnValue={value:w.getPosition()};return;case 'fullscreen':event.returnValue={value:w.isFullScreen()};return;case 'focus':w.focus();break;case 'minimize':w.minimize();break;case 'maximize':w.maximize();break;default:throw Error('Window action unavailable');}event.returnValue={value:null};return;}
+   event.returnValue={value:proofPolicy.operation(op,args)};
+ } catch(e){event.returnValue={error:e.message};}
+});
 var windows = {};
 global.browserOpenFiles = []; // Track files for open-file event
 
@@ -21,7 +30,9 @@ var packageJSON = require(__dirname + '/package.json');
 function createWindow() {
     let browserWindowOptions = packageJSON.browserWindowOptions;
     browserWindowOptions.icon = __dirname + '/' + browserWindowOptions.icon;
+    browserWindowOptions.webPreferences={nodeIntegration:false,contextIsolation:true,enableRemoteModule:false,preload:__dirname+'/proof-preload.cjs'};
     let window = new BrowserWindow(browserWindowOptions);
+    window.webContents.session.webRequest.onBeforeRequest((details,callback)=>callback({cancel:!details.url.startsWith('file:')&&!details.url.startsWith('data:')}));
     windows[window.id] = window;
     window.focus();
     window.webContents.on("will-navigate", function(e) {
@@ -109,7 +120,7 @@ function parseArgs() {
 }
 
 function start() {
-    app.commandLine.appendSwitch('remote-debugging-port', '8315');
+    // Revival proof: do not open a remote debugging listener.
     app.commandLine.appendSwitch('js-flags', '--harmony');
 
     // This method will be called when electron has done everything

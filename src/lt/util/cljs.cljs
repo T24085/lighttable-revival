@@ -21,7 +21,7 @@
 ;  INext
 ;  (-next [this] (-seq (-rest this))))
 
-(extend-type js/global.String
+(extend-type js/window.String
   IFn
   (-invoke
     ([this coll]
@@ -33,7 +33,7 @@
     (when (and coll (not (zero? (alength coll))))
                  (IndexedSeq. (js/String. coll) 0 nil))))
 
-(set! js/global.String.prototype.apply
+(set! js/window.String.prototype.apply
   (fn
     [s args]
     (if (< (alength args) 2)
@@ -41,7 +41,7 @@
       (get (aget args 0) s (aget args 1)))))
 
 
-(extend-type js/global.Array
+(extend-type js/window.Array
   ISeqable
   (-seq [coll]
     (when (and coll (not (zero? (alength coll))))

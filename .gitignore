@@ -14,3 +14,7 @@
 /deploy/core/lighttable/bootstrap.js
 /deploy/core/lighttable/bootstrap.js.map
 /deploy/core/lighttable/cljs/
+
+# Isolated revival runtime and dependencies
+.revival/
+proof-main.js

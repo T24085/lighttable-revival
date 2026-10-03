@@ -6,10 +6,10 @@
 
 (def electron true)
 
-(def fs (js/require "fs"))
-(def remote (.-remote (js/require "electron")))
-(def clipboard (.-clipboard (js/require "electron")))
-(def electron-shell (.-shell (js/require "electron")))
+(def fs (js/ltRequire "fs"))
+(def remote (.-remote (js/ltRequire "electron")))
+(def clipboard (.-clipboard (js/ltRequire "electron")))
+(def electron-shell (.-shell (js/ltRequire "electron")))
 
 (defn get-data-path []
   (.getAppPath (.-app remote)))
@@ -44,7 +44,7 @@
   []
   (.readText clipboard))
 
-(def platform (normalize (.-platform js/process)))
+(def platform (normalize (.-platform js/ltProcess)))
 
 (defn mac? []
   (= platform :mac))

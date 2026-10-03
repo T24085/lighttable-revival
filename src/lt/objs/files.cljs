@@ -9,13 +9,13 @@
             [lt.util.js :refer [now]])
   (:require-macros [lt.macros :refer [behavior]]))
 
-(def ^:private fs (js/require "fs"))
-(def ^:private fpath (js/require "path"))
+(def ^:private fs (js/ltRequire "fs"))
+(def ^:private fpath (js/ltRequire "path"))
 ;; https://github.com/shelljs/shelljs
 (def ^:private shell (load/node-module "shelljs"))
 ;; https://github.com/electron/electron/blob/master/docs/api/shell.md
-(def ^:private electron-shell (.-shell (js/require "electron")))
-(def ^:private os (js/require "os"))
+(def ^:private electron-shell (.-shell (js/ltRequire "electron")))
+(def ^:private os (js/ltRequire "os"))
 (def ^:private data-path (platform/get-data-path))
 
 (defn- typelist->index [cur types]
@@ -68,10 +68,10 @@
 (def line-ending "Current platform-specific line ending." (.-EOL os))
 (def separator "Current platform-specific file separator." (.-sep fpath))
 (def ^:private available-drives #{})
-(def cwd "Directory process is started in." (js/process.cwd))
+(def cwd "Directory process is started in." (js/ltProcess.cwd))
 
 (when (= separator "\\")
-  (.exec (js/require "child_process") "wmic logicaldisk get name"
+  (.exec (js/ltRequire "child_process") "wmic logicaldisk get name"
          (fn [_ out _]
            (let [ds (rest (.split out #"\r\n|\r|\n"))
                  ds (map #(str (.trim %) separator) (remove empty? ds))]
@@ -496,9 +496,9 @@
   "Return users' home directory (e.g. ~/) or path under it."
   ([] (home nil))
   ([path]
-   (let [h (if (= js/process.platform "win32")
-             js/process.env.USERPROFILE
-             js/process.env.HOME)]
+   (let [h (if (= js/ltProcess.platform "win32")
+             js/ltProcess.env.USERPROFILE
+             js/ltProcess.env.HOME)]
      (join h (or path separator)))))
 
 (defn lt-home
@@ -512,8 +512,8 @@
   settings, plugins, logs, and caches)."
   ([] (lt-user-dir ""))
   ([path]
-   (if js/process.env.LT_USER_DIR
-     (join js/process.env.LT_USER_DIR path)
+   (if js/ltProcess.env.LT_USER_DIR
+     (join js/ltProcess.env.LT_USER_DIR path)
      (join data-path path))))
 
 (defn walk-up-find

@@ -92,7 +92,7 @@
 
 (def w (background (fn [obj-id m]
                      (.log js/console "M:" (pr-str obj-id) (pr-str m))
-                     (let [StringStream (-> (js/require (str js/ltpath "/core/node_modules/codemirror/addon/runmode/runmode.node.js"))
+                     (let [StringStream (-> (js/ltRequire (str js/ltpath "/core/node_modules/codemirror/addon/runmode/runmode.node.js"))
                                             (.-StringStream))
                            stream (fn [s]
                                     (StringStream. s))
@@ -354,7 +354,7 @@
 (behavior ::init
           :triggers #{:init}
           :reaction (fn [this]
-                      (load/js "core/node_modules/codemirror_addons/show-hint.js" :sync)
+                      (load/js "core/vendor/codemirror_addons/show-hint.js" :sync)
                       (js/CodeMirror.extendMode "clojure" (clj->js {:hint-pattern #"[\w\-\>\:\*\$\?\<\!\+\.\/foo]"}))
                       (js/CodeMirror.extendMode "text/x-clojurescript" (clj->js {:hint-pattern #"[\w\-\>\:\*\$\?\<\!\+\.\/foo]"}))
                       (js/CodeMirror.extendMode "css" (clj->js {:hint-pattern #"[\w\.\-\#]"}))

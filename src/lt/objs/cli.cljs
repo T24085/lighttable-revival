@@ -11,11 +11,11 @@
             [lt.objs.opener :as opener])
   (:require-macros [lt.macros :refer [behavior]]))
 
-(def remote (.-remote (js/require "electron")))
+(def remote (.-remote (js/ltRequire "electron")))
 
 (defn open-paths [path-line-pairs add?]
   (doseq [[path line] path-line-pairs
-          :when (not= path (.-execPath js/process))]
+          :when (not= path (.-execPath js/ltProcess))]
     (if (files/exists? path)
       (if (files/dir? path)
         (object/raise workspace/current-ws :add.folder! path)
@@ -46,7 +46,7 @@
        ;; file manager e.g. ["/path/to/electron" "-psn_0_12381134"]. Rather than add
        ;; a brittle check to remove that argument, check open-files first
        (or (seq open-files)
-           (seq (if js/process.env.LT_DEV_CLI (subvec argv 2) (rest argv))))))
+           (seq (if js/ltProcess.env.LT_DEV_CLI (subvec argv 2) (rest argv))))))
 
 ;;*********************************************************
 ;; Behaviors

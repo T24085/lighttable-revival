@@ -1,0 +1,4 @@
+'use strict';
+const {contextBridge,ipcRenderer}=require('electron');
+function call(op,...args){const res=ipcRenderer.sendSync('proof-operation',op,args);if(res.error)throw Error(res.error);return res.value;}
+contextBridge.exposeInMainWorld('ltProof',{info:call('info'),exists:p=>call('exists',p),read:p=>call('read',p),stat:p=>call('stat',p),list:p=>call('list',p),real:p=>call('real',p),mkdir:p=>call('mkdir',p),write:(p,s)=>call('write',p,s),append:(p,s)=>call('append',p,s),calculate:s=>call('calculate',s),window:(action,args)=>call('window',action,args),onApp:cb=>{ipcRenderer.on('app',(_e,...args)=>cb(null,...args));},notifyInit:()=>ipcRenderer.send('initWindow',1)});

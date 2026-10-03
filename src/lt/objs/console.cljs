@@ -15,14 +15,14 @@
                    [lt.macros :refer [behavior defui]]))
 
 (def console-limit 50)
-(def util-inspect (.-inspect (js/require "util")))
+(def util-inspect (.-inspect (js/ltRequire "util")))
 (def logs-dir (files/lt-user-dir "logs"))
 (def core-log (try
                 (when-not (files/exists? logs-dir)
                   (when-not (files/exists? (files/lt-user-dir))
                     (files/mkdir (files/lt-user-dir)))
                   (files/mkdir logs-dir))
-                (.. (js/require "fs") (createWriteStream (files/join logs-dir (str "window" (app/window-number) ".log"))))
+                (.. (js/ltRequire "fs") (createWriteStream (files/join logs-dir (str "window" (app/window-number) ".log"))))
                 (catch :default e
                   (.error js/console (str "Failed to initialize the log writer: " e)))))
 
@@ -78,7 +78,7 @@
                :else (str e)))
          "error")))
 
-(.on js/process "uncaughtException" #(error %))
+(.on js/ltProcess "uncaughtException" #(error %))
 
 (defui console-ui [this]
   [:ul.console]

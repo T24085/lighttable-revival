@@ -21,6 +21,8 @@
     </div>
     <div id="wrapper" style="opacity:0;">
     </div>
+    <script src="proof-facade.js"></script>
+    <script src="proof-ui.js"></script>
     <script src="lighttable/util/keyevents.js" type="text/javascript"> </script>
     <script src="lighttable/util/throttle.js" type="text/javascript"> </script>
     <script type="text/javascript">
@@ -32,6 +34,7 @@
         script.onload = function() {
             try {
                 lt.objs.app.init();
+                ltProofUI.initialize();
             } catch (e) {
                 console.error(e);
                 console.log(e.stack);

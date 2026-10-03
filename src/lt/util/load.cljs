@@ -2,10 +2,10 @@
   "Provide functions to load js, css and node module assets into LT."
   (:require [clojure.string :as string]))
 
-(def fpath "Provides access to Node/Electron [path library](https://nodejs.org/api/path.html)." (js/require "path"))
-(def fs "Provides access to Node/Electron [fs library](https://nodejs.org/api/fs.html)." (js/require "fs"))
+(def fpath "Provides access to Node/Electron [path library](https://nodejs.org/api/path.html)." (js/ltRequire "path"))
+(def fs "Provides access to Node/Electron [fs library](https://nodejs.org/api/fs.html)." (js/ltRequire "fs"))
 
-(def dir "Directory where Light Table is being executed." (str js/__dirname "/.."))
+(def dir "Directory where Light Table is being executed." (str js/ltDirname "/.."))
 
 (def ^:dynamic *force-reload* "When true, various parts of Light Table will reload."
   false)
@@ -34,7 +34,7 @@
 (defn node-module
   "Requires Light Table's bundled node modules located at `path`."
   [path]
-  (js/require (str dir "/core/node_modules/" path)))
+  (js/ltRequire (str dir "/core/node_modules/" path)))
 
 (defn- abs-source-mapping-url
   "Converts source mapping to use absolute paths for URLs. Also converts `\\` to `/` in order to maintain compatibility with Windows."

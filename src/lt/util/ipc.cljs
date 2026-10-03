@@ -1,7 +1,7 @@
 (ns lt.util.ipc
   "Util functions for the ipc renderer - https://github.com/atom/electron/blob/master/docs/api/ipc-renderer.md")
 
-(def ipc "Provides access to the ipc renderer." (.-ipcRenderer (js/require "electron")))
+(def ipc "Provides access to the ipc renderer." (.-ipcRenderer (js/ltRequire "electron")))
 
 ;; `send` and `on` are declared here with their bodies defined later as otherwise Codox will use the
 ;; redefined `send` and `on` in the below when block instead.
@@ -10,7 +10,7 @@
 (declare start)
 
 ;; Set $IPC_DEBUG to debug incoming and outgoing ipc messages for the renderer process
-(when (aget js/process.env "IPC_DEBUG")
+(when (aget js/ltProcess.env "IPC_DEBUG")
   (let [old-send transport
         old-on start]
     (def transport (fn [& args]

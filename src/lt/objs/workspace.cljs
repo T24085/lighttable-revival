@@ -18,7 +18,7 @@
 ;; TODO: The way I did this is awful. Should get cleaned up
 ;;*********************************************************
 
-(def fs (js/require "fs"))
+(def fs (js/ltRequire "fs"))
 (def max-depth 10)
 (def watch-interval 1000)
 

@@ -13,7 +13,7 @@
 (def port 0)
 (def sockets (atom {}))
 (def io (load/node-module "socket.io"))
-(def net (js/require "net"))
+(def net (js/ltRequire "net"))
 
 (defn send-to [sock data]
   (if sock
