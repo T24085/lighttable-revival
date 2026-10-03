@@ -171,3 +171,9 @@ if (process.env["IPC_DEBUG"]) {
 }
 
 start();
+
+// Asynchronous language execution has its own disposable sandboxed renderer.
+const proofJS=require('./proof-js.cjs');
+function proofSender(event){return event.senderFrame===event.sender.mainFrame&&event.senderFrame.url.startsWith(require('url').pathToFileURL(require('path').join(__dirname,'LightTable.html')).href+'?');}
+ipcMain.handle('proof-javascript',async(event,source)=>{if(!proofSender(event))throw Error('Untrusted evaluation caller');return proofJS.run(event.sender.id,source);});
+ipcMain.on('proof-javascript-cancel',event=>{if(proofSender(event))proofJS.cancel(event.sender.id);});

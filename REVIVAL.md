@@ -36,3 +36,18 @@ See [historical backlog](docs/revival/BACKLOG.md). Every historical report stays
 ## Attribution
 
 Original Light Table contributors, Kodowa and Cognitect: see retained [README](README.md) and [MIT license](LICENSE.md). CodeMirror: [upstream](https://github.com/codemirror/codemirror5), with original MIT notices in vendored addon files. Electron and npm distributions preserve their included licenses when packaged. Workshop changes retain the repository's original MIT terms.
+## JavaScript execution checkpoint
+
+The experimental Run JavaScript button evaluates synchronous statements, variables, functions, arrays and objects using a new sandboxed Chromium renderer and dedicated worker for every run. It does not use Node vm for this language mode. Renderer Node integration, legacy remote, preload and host IPC are absent. The worker has no DOM; networking is blocked by CSP and session request denial. Navigation and new windows are denied. Async results are explicitly unsupported; timers, imports and nested worker constructors are unavailable. There is no automatic rerun.
+
+Each response carries the main-process source snapshot and SHA-256. Editing makes prior output stale; superseding or cancelling a run destroys its context. State does not carry to the next run. This does not update other running application state.
+
+Limits: 16 KiB source/output, a 750 ms whole-job watchdog, and a 192 MiB observed renderer working-set guard sampled every 20 ms. The memory guard is reactive, not a Windows Job Object hard quota; transient overshoot and native allocations remain possible. Chromium process sandboxing is the capability boundary, not deletion of JavaScript properties. Electron 13 is obsolete and this is not a production sandbox or approval to execute hostile third-party code.
+
+### Findings and evidence
+
+Original startup failed because legacy renderer Node/global assumptions no longer worked with the restricted renderer. A narrow explicit bridge and browser compatibility facade restore the bounded editor workflow. The facade absolute-path resolver initially duplicated an absolute path; corrected. Missing CodeMirror addons were restored byte-for-byte from official upstream master. The legacy sample User plugin references an unavailable crate; its sample loading behavior is omitted, not claimed repaired.
+
+44 policy checks and 23 actual UI edge checks cover numeric grammar, path restrictions, stale versions, reordered responses, cancel guards and recovery. UI delays are test transports, not proof that arbitrary asynchronous user programs work. A save comparison initially failed because the original editor adds a final newline and writes CRLF; the assertion now compares canonical newlines, with disk bytes reported separately.
+
+The language integration additionally verifies variables/functions/objects/arrays, fresh globals, absent Node/network/DOM/worker capabilities, actual infinite-loop termination, unsupported Promise results, syntax/runtime error recovery, genuine active cancellation, superseded execution destruction, and original-editor version-linked output 43. The live socket server and background plugin worker remain disabled; historical GitHub issue numbers in BACKLOG are unverified unless explicitly reproduced.

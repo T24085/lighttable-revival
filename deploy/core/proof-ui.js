@@ -2,7 +2,7 @@
 window.ltProofUI=(()=>{
 let cm=null,last=null,revision=0,runId=0,pending=Promise.resolve();const panel=document.createElement('aside');panel.id='proof-calculation';panel.style.cssText='position:fixed;right:0;top:40px;bottom:20px;width:310px;padding:22px;box-sizing:border-box;background:#202526;color:#e5ece8;border-left:1px solid #4a5550;z-index:25;font:14px/1.6 Consolas,monospace';
 const title=document.createElement('h3');title.textContent='REVIVAL / CALCULATION';title.style.cssText='font:13px Arial;letter-spacing:2px;color:#9cb9ae';panel.append(title);
-const scope=document.createElement('p');scope.textContent='Numeric arithmetic only. Each run uses a fresh context.';scope.style.color='#a7b4ae';panel.append(scope);
+const scope=document.createElement('p');scope.textContent='Run numeric arithmetic or synchronous JavaScript. Every run starts fresh. Async results are unsupported.';scope.style.color='#a7b4ae';panel.append(scope);
 const controls=document.createElement('div');panel.append(controls);
 const output=document.createElement('div');output.id='proof-output';output.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;margin-top:25px';output.textContent='Open calculation.js to begin.';panel.append(output);
 function editor(){return [...document.querySelectorAll('.CodeMirror')].map(e=>e.CodeMirror).find(c=>c&&c.getWrapperElement().getBoundingClientRect().height>0);}
@@ -18,6 +18,7 @@ output.dataset.status='running';output.textContent='Calculating this code versio
 pending=(async()=>{try{const result=await transport(source);if(id!==runId)return {accepted:false,reason:'superseded',result};if(version!==revision||source!==cm.getValue()){output.dataset.status='stale';output.textContent='STALE — calculation belongs to previous code\n\nSource: '+result.source+'\nResult: '+result.result+'\nSHA-256:\n'+result.sha256;return {accepted:false,reason:'source changed',result};}last=result;output.dataset.status='current';output.textContent='RESULT  '+last.result+'\n\nSource:\n'+last.source+'\n\nSHA-256:\n'+last.sha256+'\n\nCurrent code version verified.';return {accepted:true,result};}catch(error){if(id===runId){output.dataset.status='rejected';output.textContent='Calculation rejected: '+error.message;}return {accepted:false,reason:'error',error:error.message};}})();return pending;
 }
 button('proof-evaluate','Run calculation',()=>evaluate());
-button('proof-cancel','Cancel',()=>{runId++;output.dataset.status='cancelled';output.textContent='Pending result cancelled. Editor remains available.';});
+button('proof-javascript','Run JavaScript',()=>evaluate(source=>window.ltProof.javascript(source)));
+button('proof-cancel','Cancel',()=>{runId++;window.ltProof.cancelJavascript();output.dataset.status='cancelled';output.textContent='Pending result cancelled. Editor remains available.';});
 return {initialize(){document.body.append(panel);const style=document.createElement('style');style.textContent='#canvas{right:310px !important} .CodeMirror{max-width:calc(100vw - 310px)}';document.head.append(style);},connect,getLast:()=>last,evaluate,pending:()=>pending};
 })();
