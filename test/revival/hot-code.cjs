@@ -1,0 +1,16 @@
+'use strict';
+const assert=require('assert/strict'),vm=require('vm'),hot=require('../../deploy/core/revival-hot-code.cjs');
+const key='__test_live',address='lt-preview://test/app.js',context=vm.createContext({});vm.runInContext(hot.runtime(key),context);
+const source='const speed=1;let count=0;const scene={angle:0};function step(){count+=speed;scene.angle+=1;}globalThis.initialStep=step;globalThis.initialScene=scene;step();';
+const first=hot.compile(source,address,key);assert(first);vm.runInContext(first.code,context);assert.equal(vm.runInContext('count',context),1);
+const update=hot.compile(source.replace('speed=1','speed=2').replace('scene.angle+=1','scene.angle+=3'),address,key);assert.equal(update.fingerprint,first.fingerprint);vm.runInContext(update.patch,context);vm.runInContext('step()',context);
+assert.equal(vm.runInContext('count',context),3);assert.equal(vm.runInContext('scene.angle',context),4);assert.equal(vm.runInContext('step===initialStep&&scene===initialScene',context),true);
+assert.notEqual(hot.compile(source+'scene.angle=0;',address,key).fingerprint,first.fingerprint);
+assert.equal(hot.compile('import {x} from "./x.mjs";',address,key),null);
+assert.equal(hot.compile('function step(){eval("42")}',address,key),null);
+assert.equal(hot.compile('const speed=1;globalThis.current=speed;',address,key),null);
+const strictContext=vm.createContext({});vm.runInContext(hot.runtime(key),strictContext);
+const strictSource='"use strict";function receiver(){return this;}function localReceiver(){"use strict";return this;}';
+const strict=hot.compile(strictSource,address,key);vm.runInContext(strict.code,strictContext);assert.equal(vm.runInContext('receiver()',strictContext),undefined);assert.equal(vm.runInContext('localReceiver()',strictContext),undefined);
+vm.runInContext(hot.compile(strictSource,address,key).patch,strictContext);assert.equal(vm.runInContext('receiver()',strictContext),undefined);assert.equal(vm.runInContext('localReceiver()',strictContext),undefined);
+console.log(JSON.stringify({passed:true,checks:['Function bodies and live constants update without rerunning initialization','Counters and scene objects retain state','Callback identity stays stable','Changed initialization requires refresh','ES modules and eval retain the existing refresh route','Initialization-only constants cannot pretend to update running state','Program and function strict this semantics survive hot updates']}));

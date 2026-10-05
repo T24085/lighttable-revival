@@ -481,7 +481,9 @@
                        (object/raise tree event (dom/val me))))))
 
 (defn open-folder []
-  (dialogs/dir tree :workspace.add.folder!))
+  (if (exists? js/ltProjects)
+    (.open js/ltProjects)
+    (dialogs/dir tree :workspace.add.folder!)))
 
 (defn open-file []
   (dialogs/file tree :workspace.add.file!))
@@ -644,6 +646,22 @@
               :desc "Workspace: add file"
               :exec (fn []
                       (open-file))})
+
+(cmd/command {:command :project.new
+              :desc "Project: Create a new JavaScript project"
+              :exec (fn [] (.newProject js/ltProjects))})
+
+(cmd/command {:command :project.open
+              :desc "Project: Open a project folder"
+              :exec (fn [] (.open js/ltProjects))})
+
+(cmd/command {:command :project.refresh
+              :desc "Project: Refresh files"
+              :exec #(.refresh js/ltProjects)})
+
+(cmd/command {:command :project.new-file
+              :desc "Project: Create a file in the current project"
+              :exec (fn [] (.newFile js/ltProjects))})
 
 (cmd/command {:command :workspace.show
               :desc "Workspace: Toggle workspace tree"

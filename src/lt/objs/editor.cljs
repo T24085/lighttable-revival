@@ -998,6 +998,8 @@
           :reaction (fn [this]
                       (load/js "core/node_modules/codemirror/addon/edit/matchbrackets.js" :sync)
                       (load/js "core/node_modules/codemirror/addon/edit/closebrackets.js" :sync)
+                      (load/js "core/node_modules/codemirror/addon/edit/closetag.js" :sync)
+                      (load/js "core/node_modules/codemirror/addon/edit/matchtags.js" :sync)
                       (load/js "core/node_modules/codemirror/addon/comment/comment.js" :sync)
                       (load/js "core/node_modules/codemirror/addon/selection/active-line.js" :sync)
                       ;; TODO: use addon/mode/overlay.js

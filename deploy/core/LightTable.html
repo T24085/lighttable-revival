@@ -23,6 +23,14 @@
     </div>
     <script src="proof-facade.js"></script>
     <script src="proof-ui.js"></script>
+    <script src="revival-projects.js"></script>
+    <script src="revival-preview.js"></script>
+    <script src="revival-live.js"></script>
+    <script src="revival-editing.js"></script>
+    <script src="revival-languages.js"></script>
+    <script src="revival-npm.js"></script>
+    <script src="revival-assistant-editor.js"></script>
+    <script src="revival-assistant-ui.js"></script>
     <script src="lighttable/util/keyevents.js" type="text/javascript"> </script>
     <script src="lighttable/util/throttle.js" type="text/javascript"> </script>
     <script type="text/javascript">
@@ -35,6 +43,14 @@
             try {
                 lt.objs.app.init();
                 ltProofUI.initialize();
+                ltProjects.initialize();
+                ltPreview.initialize();
+                ltNpmUI.initialize();
+                ltStartup.initialize();
+                ltLive.initialize();
+                ltEditing.initialize();
+                ltLanguages.initialize();
+                ltAssistantUI.initialize().catch(function(error){console.error(error);});
             } catch (e) {
                 console.error(e);
                 console.log(e.stack);

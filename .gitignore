@@ -14,6 +14,8 @@
 /deploy/core/lighttable/bootstrap.js
 /deploy/core/lighttable/bootstrap.js.map
 /deploy/core/lighttable/cljs/
+/deploy/core/lighttable/repl-cljs/
+/deploy/core/revival-cljs-worker.js
 
 # Isolated revival runtime and dependencies
 .revival/

@@ -1,0 +1,35 @@
+(async()=>{
+const checks=[];const check=(name,ok)=>{if(!ok)throw Error(name);checks.push(name);};
+const command=(name,...args)=>lt.objs.command.exec_BANG_(cljs.core.keyword(name),...args);
+const active=()=>ltProofUI.connect();
+command('open-path',ltProof.info.docs+'\\order-report-test.js');const cm=active();
+check('Selected tab owns Activity, original editor context and source before focus',lt.objs.editor.__GT_cm_ed(lt.objs.editor.pool.last_active())===cm&&cm.getValue().replace(/\r\n/g,'\n')===ltProof.read(ltProof.info.docs+'\\order-report-test.js').replace(/\r\n/g,'\n')&&document.getElementById('proof-versions').textContent.includes('order-report-test.js'));cm.focus();
+testMenuClick('Run file');let run=await ltProofUI.pending();
+let report=JSON.parse(run.result.result);
+check('Order report: paid sales, categories, regions and tax',run.accepted&&report.paidOrders===4&&report.itemCount===8&&report.revenue===129&&report.tax===10.32&&report.averageOrder===32.25&&report.byCategory.books===66&&report.byCategory.tools===63&&report.byRegion.north===75&&report.byRegion.south===54);
+check('Normal Run uses a verified hard quota and reaps its process',run.result.memory.hardPrivateCommit&&run.result.memory.limitBytes===1073741824&&run.result.memory.processExited&&run.result.memory.peakPrivateBytes<=1073741824);
+const baseline=cm.getValue(),firstHash=run.result.sha256;
+cm.setValue(baseline.replace('unitPrice: 9','unitPrice: 10'));check('Edited report marks its own output stale',document.getElementById('proof-output').dataset.status==='stale');
+testMenuClick('Save file');command('eval-editor');run=await ltProofUI.pending();report=JSON.parse(run.result.result);
+check('Existing whole-file Eval command reruns changed report',run.accepted&&report.revenue===131&&report.tax===10.48&&report.averageOrder===32.75&&report.byCategory.tools===65&&report.byRegion.south===56&&run.result.sha256!==firstHash);
+check('Report saves through original file pipeline',ltProof.read(ltProof.info.docs+'\\order-report-test.js').replace(/\r\n/g,'\n')===cm.getValue());
+const currentVersion=run.result.editorVersion;
+check('Code and result versions are visible',document.getElementById('proof-versions').textContent.includes('Code v'+(currentVersion+1))&&document.getElementById('proof-versions').textContent.includes('Result v'+(currentVersion+1)));
+cm.setValue(baseline.replace('id: 1002','id: 1001'));command('eval-editor');run=await ltProofUI.pending();check('Report validation gives actionable duplicate error',run.reason==='error'&&document.getElementById('proof-output').textContent.includes('Duplicate order: 1001'));
+cm.setValue(baseline.replace('quantity: 2','quantity: -1'));command('eval-editor');run=await ltProofUI.pending();check('Report rejects invalid quantity',run.reason==='error'&&run.error.includes('positive integer'));
+cm.setValue('const ignored=999;\n20 + 22');cm.setSelection({line:1,ch:0},{line:1,ch:7});command('eval-editor-form');run=await ltProofUI.pending();check('Existing form Eval command executes selected JavaScript',run.accepted&&run.result.result==='42'&&run.result.source==='20 + 22'&&run.result.scope==='selection');
+cm.setCursor({line:1,ch:3});command('eval-editor-form');run=await ltProofUI.pending();check('Form Eval with no selection executes the current line',run.accepted&&run.result.source==='20 + 22'&&run.result.result==='42');
+check('Selected result appears inline in original editor',cm.getWrapperElement().querySelector('.revival-inline-result[data-status="current"]')?.textContent.includes('42'));
+cm.replaceRange(' ',{line:1,ch:0});check('Inline output becomes stale when the code changes',cm.getWrapperElement().querySelector('.revival-inline-result[data-status="stale"]')?.textContent.includes('STALE'));
+command('clear-inline-results');check('Original clear-results command removes JavaScript output',!cm.getWrapperElement().querySelector('.revival-inline-result')&&document.getElementById('proof-output').dataset.status==='idle');
+cm.setValue('console.log("orders", {paid:4}); console.warn("check tax"); 42');command('eval-editor');run=await ltProofUI.pending();check('Console messages appear next to the result',run.accepted&&run.result.logs.join('\n')==='log: orders {"paid":4}\nwarn: check tax'&&document.getElementById('proof-logs').textContent.includes('orders'));
+cm.setValue('for(let i=0;i<33;i++)console.log(i);42');command('eval-editor');run=await ltProofUI.pending();check('Console flood is bounded',run.reason==='error'&&run.error.includes('32 messages'));
+cm.setValue('console.log("😀".repeat(1100));42');command('eval-editor');run=await ltProofUI.pending();check('Unicode console budget counts UTF-8 bytes',run.reason==='error'&&run.error.includes('4 KiB'));
+cm.setValue('new Promise(()=>{})');command('eval-editor');await new Promise(r=>setTimeout(r,150));check('Stop menu enabled during an active normal run',testMenuItem('Stop').enabled);command('eval.cancel-all!');await ltProofUI.pending();await new Promise(r=>setTimeout(r,40));check('Existing cancel command stops actual execution',document.getElementById('proof-output').dataset.status==='cancelled'&&!testMenuItem('Stop').enabled);
+cm.setValue('new Promise(r=>setTimeout(()=>r(777),300))');command('eval-editor');const old=ltProofUI.pending();
+testMenuClick('Calculation');const calculation=active();calculation.setValue('43');const other=await ltProofUI.runJavaScript();await old;
+check('Switching files cannot show another file result as current',other.accepted&&ltProofUI.getLast().result==='43'&&document.getElementById('proof-versions').textContent.includes('calculation.js'));
+command('open-path',ltProof.info.docs+'\\order-report-test.js');active();check('File retains its own stale or previous output',!ltProofUI.getLast()||ltProofUI.getLast().result!=='43');
+cm.setValue(baseline);cm.focus();command('save');command('eval-editor');run=await ltProofUI.pending();check('Recovery runs original report again',run.accepted&&JSON.parse(run.result.result).revenue===129);
+return {passed:true,checks,report:JSON.parse(run.result.result),result:run.result};
+})()

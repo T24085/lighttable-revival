@@ -451,7 +451,52 @@
 ;; Misc
 ;;*********************************************************
 
+(behavior ::preview-close
+          :triggers #{:close}
+          :reaction (fn [this]
+                      (.closed js/ltPreview (object/->id this))
+                      (object/destroy! this)))
+
+(behavior ::preview-close-button
+          :triggers #{:close-button+}
+          :reaction (fn [_ _] true))
+
+(object/object* ::preview
+                :name "Browser preview"
+                :tags #{:browser-preview}
+                :behaviors [::preview-close ::preview-close-button]
+                :init (fn [this entry]
+                        (.placeholder js/ltPreview (object/->id this) entry)))
+
+(defn preview-tab [entry]
+  (let [preview (object/create ::preview entry)]
+    (tabs/add! preview)
+    (tabs/active! preview)
+    preview))
+
+(cmd/command {:command :browser.preview-file :desc "Browser: Preview current HTML or JavaScript file"
+              :exec (fn [] (.open js/ltPreview))})
+(cmd/command {:command :browser.live-toggle :desc "Browser: Toggle automatic live view beside the code"
+              :exec (fn [] (.toggle js/ltLive))})
+(cmd/command {:command :browser.live-pause :desc "Browser: Pause live view"
+              :exec (fn [] (.pause js/ltLive))})
+(cmd/command {:command :browser.live-resume :desc "Browser: Resume live view"
+              :exec (fn [] (.resume js/ltLive))})
+(cmd/command {:command :browser.preview-refresh :desc "Browser: Refresh project preview"
+              :exec (fn [] (.refresh js/ltPreview))})
+(cmd/command {:command :browser.preview-server :desc "Browser: Preview running development server"
+              :exec (fn [] (.openServer js/ltPreview))})
+(cmd/command {:command :browser.preview-selection :desc "Browser: Evaluate JavaScript selection in preview"
+              :exec (fn [] (.evaluateSelection js/ltPreview))})
+
+(cmd/command {:command :editor.open-current-file-in-browser
+              :desc "Editor: Open current file in browser"
+              :exec (fn [] (.open js/ltPreview))})
+(cmd/command {:command :refresh-connected-browser
+              :desc "Browser: refresh active browser tab"
+              :exec (fn [] (.refresh js/ltPreview))})
+
 (scl/add-connector {:name "Browser"
                     :desc "Open a browser tab to eval JavaScript, CSS, and HTML live."
                     :connect (fn []
-                               (cmd/exec! :add-browser-tab))})
+                               (cmd/exec! :browser.preview-file))})

@@ -258,11 +258,7 @@
       (wrap-debounce)
       (store-behavior*)))
 
-(defn raise-reduce
-  "Reduce over invoked object's behavior fns for given trigger. Start
-  is initial value for reduce and any args are passed to behavior fn"
-  [obj k start & args]
-  (let [reactions (-> @obj :listeners k)]
+(defn- reduce-reactions [obj reactions start args]
     (reduce (fn [res cur]
               (let [func (:reaction (->behavior cur))
                     args (if (coll? cur)
@@ -276,7 +272,21 @@
                   (binding [*behavior-meta* meta]
                     (apply func obj res args)))))
             start
-            reactions)))
+            reactions))
+
+(defn raise-reduce
+  "Reduce over invoked object's behavior fns for given trigger. Start
+  is initial value for reduce and any args are passed to behavior fn"
+  [obj k start & args]
+  (reduce-reactions obj (-> @obj :listeners k) start args))
+
+(defn raise-reduce-with-tags
+  "Reduce using prospective tags without changing the object's live tags,
+  listeners, source or identity. Only the selected trigger is invoked."
+  [obj tags k start & args]
+  (let [behs (set (concat (:behaviors @obj) (tags->behaviors tags)))
+        reactions (get (->triggers behs) k)]
+    (reduce-reactions obj reactions start args)))
 
 (declare create)
 

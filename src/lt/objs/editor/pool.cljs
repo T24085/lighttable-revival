@@ -120,9 +120,11 @@
                       (focus-last)))
 
 (defn- reload [ed]
-  (editor/set-val-and-keep-cursor ed (:content (files/open-sync (-> @ed :info :path))))
-  (doc/update-stats (-> @ed :info :path))
-  (object/merge! ed {:dirty false}))
+  (when-let [data (files/open-sync (-> @ed :info :path) true)]
+    (editor/set-val-and-keep-cursor ed (:content data))
+    (doc/update-saved-content (-> @ed :info :path) (:content data))
+    (object/merge! ed {:dirty false :editor.generation (editor/->generation ed)})
+    (object/raise ed :clean)))
 
 (behavior ::watched.update
           :triggers #{:watched.update}

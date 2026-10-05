@@ -1,0 +1,117 @@
+name: Light Table Windows revival
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  editor:
+    runs-on: windows-2025
+    # Native fixture ceilings total over 35 minutes; allow cold builds and
+    # compiler/backend checks too. This is an allowance, not a measured CI run.
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: |
+            deploy/core/package-lock.json
+            deploy/electron/package-lock.json
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '24'
+      - name: Build original ClojureScript and pinned Electron
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force .revival | Out-Null
+          $writer = [IO.StreamWriter]::new((Join-Path $PWD '.revival/ci-build.log'), $false, [Text.UTF8Encoding]::new($false))
+          # Reserve 8 KiB within the 8 MiB cap for a truncation marker/failure.
+          $written = 0L; $limit = 8MB - 8KB; $truncated = $false
+          try {
+            & ./script/revival-build.ps1 *>&1 | ForEach-Object {
+              Write-Output $_
+              $line = $_.ToString() + [Environment]::NewLine
+              $bytes = [Text.Encoding]::UTF8.GetByteCount($line)
+              if ($written + $bytes -le $limit) {
+                $writer.Write($line); $written += $bytes
+              } elseif (!$truncated) {
+                $writer.WriteLine('[Transcript reached 8 MiB; complete console output remains in the CI step log.]')
+                $truncated = $true
+              }
+            }
+          } catch {
+            $failure = $_.Exception.ToString()
+            $writer.WriteLine($failure.Substring(0, [Math]::Min(2048, $failure.Length)))
+            throw
+          } finally { $writer.Dispose() }
+      - name: Audit both locked dependency trees
+        run: |
+          $preflight = Get-Content .revival/preflight-result.json -Raw | ConvertFrom-Json
+          if ($preflight.status -ne 'passed') { throw 'Build preflight did not pass' }
+          foreach ($part in 'core','electron') {
+            Push-Location "deploy/$part"
+            try {
+              & $preflight.node.path $preflight.npm.cli audit --json --ignore-scripts --registry https://registry.npmjs.org > "../../.revival/$part-audit-ci.json"
+              if ($LASTEXITCODE -ne 0) { throw "Dependency audit failed for $part" }
+            } finally { Pop-Location }
+          }
+      - name: Set up app-local IPython client and kernel test dependencies
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pythonPath = (Get-Command python.exe -ErrorAction Stop).Source
+          & ./script/revival-repl-setup.ps1 -PythonExecutable $pythonPath
+          "LT_PYTHON_EXECUTABLE=$pythonPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Test editor, projects, clients, Node, npm and execution quotas
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $preflight = Get-Content .revival/preflight-result.json -Raw | ConvertFrom-Json
+          if ($preflight.status -ne 'passed') { throw 'Build preflight did not pass' }
+          $env:LT_NODE_EXECUTABLE = $preflight.node.path
+          $writer = [IO.StreamWriter]::new((Join-Path $PWD '.revival/ci-regression.log'), $false, [Text.UTF8Encoding]::new($false))
+          # Reserve 8 KiB within the 8 MiB cap for a truncation marker/failure.
+          $written = 0L; $limit = 8MB - 8KB; $truncated = $false
+          try {
+            & ./script/revival-test.ps1 *>&1 | ForEach-Object {
+              Write-Output $_
+              $line = $_.ToString() + [Environment]::NewLine
+              $bytes = [Text.Encoding]::UTF8.GetByteCount($line)
+              if ($written + $bytes -le $limit) {
+                $writer.Write($line); $written += $bytes
+              } elseif (!$truncated) {
+                $writer.WriteLine('[Transcript reached 8 MiB; complete console output remains in the CI step log.]')
+                $truncated = $true
+              }
+            }
+          } catch {
+            $failure = $_.Exception.ToString()
+            $writer.WriteLine($failure.Substring(0, [Math]::Min(2048, $failure.Length)))
+            throw
+          } finally { $writer.Dispose() }
+      - name: Retain test results and failure evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: windows-revival-evidence
+          retention-days: 7
+          include-hidden-files: true
+          path: |
+            .revival/*-result.json
+            .revival/*-progress.json
+            .revival/*-audit-ci.json
+            .revival/ci-*.log
+            .revival/*-stdout.log
+            .revival/*-stderr.log
+            .revival/*-console.log
+            .revival/*.png

@@ -186,6 +186,7 @@
  [:editor :lt.plugins.auto-paren/try-remove-pair]
  [:editor :lt.plugins.auto-paren/open-pair]
  [:editor :lt.plugins.auto-complete/show-hint]
+ [:editor :lt.plugins.revival-editing/html-tag-tools]
  [:editor :lt.objs.editor/not-read-only]
  [:editor :lt.objs.opener/untrack-closed]
  [:editor :lt.objs.opener/unwatch-closed]
@@ -236,6 +237,11 @@
  [:editor.inline-result :lt.objs.eval/inline-results]
  [:editor.inline-result :lt.objs.eval/inline-exceptions]
 
+ [:editor.javascript :lt.objs.clients.javascript/editor-context]
+ [:editor.html :lt.objs.clients.javascript/editor-context]
+ [:editor.javascript :lt.objs.clients.javascript/editor-eval]
+ [:editor.javascript :lt.objs.clients.javascript/editor-eval-one]
+
  [:editor.keymap :lt.objs.settings/on-keymap-editor-save]
  [:editor.keymap :lt.objs.settings/eval-settings]
  [:editor.keymap :lt.objs.langs.keymap/keymap-hints]
@@ -276,6 +282,8 @@
                                     {:exts [:cbl :cob], :mime "text/x-cobol", :tags [:editor.cobol], :name "COBOL"}
                                     {:exts [:coffee], :mime "text/x-coffeescript", :tags [:editor.coffee], :name "CoffeeScript"}
                                     {:exts [:cl :lisp], :mime "text/x-common-lisp", :tags [:editor.common-lisp], :name "Common Lisp"}
+                                    {:exts [:css], :mime "text/css", :tags [:editor.css], :name "CSS"}
+                                    {:exts [:scss], :mime "text/x-scss", :tags [:editor.scss], :name "SCSS"}
                                     {:exts [:cql :cypher :cyp], :mime "application/x-cypher-query", :tags [:editor.cypher], :name "Cypher"}
                                     {:exts [:d], :mime "text/x-d", :tags [:editor.d], :name "D"}
                                     {:exts [:diff :patch], :mime "text/x-diff", :tags [:editor.diff], :name "Diff"}
@@ -283,6 +291,8 @@
                                     {:exts [:dtd], :mime "application/xml-dtd", :tags [:editor.dtd], :name "DTD"}
                                     {:exts [:dylan :dyl :intr :lid], :mime "text/x-dylan", :tags [:editor.dylan], :name "Dylan"}
                                     {:exts [:ecl], :mime "text/x-ecl", :tags [:editor.ecl], :name "ECL"}
+                                    {:exts [:clj :cljc], :mime "text/x-clojure", :tags [:editor.clj :editor.clojure], :name "Clojure"}
+                                    {:exts [:cljs], :mime "text/x-clojurescript", :tags [:editor.cljs :editor.clojurescript], :name "ClojureScript"}
                                     {:exts [:edn], :mime "text/x-clojure", :tags [:editor.clj :editor.edn], :name "EDN"}
                                     {:exts [:e], :mime "text/x-eiffel", :tags [:editor.eiffel], :name "Eiffel"}
                                     {:exts [:ejs] :mime "application/x-ejs" :tags [:editor.ejs] :name "EJS"}
@@ -299,11 +309,14 @@
                                     {:exts [:haml], :mime "text/x-haml", :tags [:editor.haml], :name "HAML"}
                                     {:exts [:hs], :mime "text/x-haskell", :tags [:editor.haskell], :name "Haskell"}
                                     {:exts [:hx], :mime "text/x-haxe", :tags [:editor.haxe], :name "Haxe"}
-                                    {:exts [:html :htm], :mime "htmlmixed", :tags [:editor.html], :name "HTML"}
+                                    {:exts [:html :htm :shtml], :mime "htmlmixed", :tags [:editor.html], :name "HTML"}
                                     {:exts [:http], :mime "message/http", :tags [:editor.http], :name "HTTP"}
                                     {:exts [:ini], :mime "text/x-ini", :tags [:editor.ini], :name "INI"}
                                     {:exts [:jade], :mime "text/x-jade", :tags [:editor.jade], :name "Jade"}
                                     {:exts [:java], :mime "text/x-java", :tags [:editor.java], :name "Java"}
+                                    {:exts [:js :mjs :cjs], :mime "text/javascript", :tags [:editor.javascript], :name "JavaScript"}
+                                    {:exts [:jsx], :mime "text/jsx", :tags [:editor.javascript :editor.jsx], :name "JSX"}
+                                    {:exts [:json], :mime "application/json", :tags [:editor.json], :name "JSON"}
                                     {:exts [:jl], :mime "text/x-julia", :tags [:editor.julia], :name "Julia"}
                                     {:exts [:jsp] :mime "application/x-jsp" :tags [:editor.jsp] :name "JSP"}
                                     {:exts [:kt], :mime "text/x-kotlin", :tags [:editor.kotlin], :name "Kotlin"}
@@ -357,7 +370,8 @@
                                     {:exts [:toml], :mime "text/x-toml", :tags [:editor.toml], :name "TOML"}
                                     {:exts [], :mime "text/x-tornado", :tags [:editor.tornado], :name "Tornado Template"}
                                     {:exts [:ttl], :mime "text/turtle", :tags [:editor.turtle], :name "Turtle"}
-                                    {:exts [:ts], :mime "text/x-typescript", :tags [:editor.typescript], :name "TypeScript"}
+                                    {:exts [:ts :mts :cts], :mime "text/typescript", :tags [:editor.javascript :editor.typescript], :name "TypeScript"}
+                                    {:exts [:tsx], :mime "text/typescript-jsx", :tags [:editor.javascript :editor.typescript :editor.jsx], :name "TSX"}
                                     {:exts [:vb], :mime "text/x-vb", :tags [:editor.visualbasic], :name "VB"}
                                     {:exts [:vbs], :mime "text/vbscript", :tags [:editor.vbscript], :name "VBScript"}
                                     {:exts [:vtl], :mime "text/velocity", :tags [:editor.velocity], :name "Velocity"}

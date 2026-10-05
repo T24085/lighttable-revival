@@ -1,0 +1,14 @@
+'use strict';
+const {captureNativePage}=require('./native-page-capture.cjs');
+process.env.LT_REVIVAL_TEST='1';
+const {app,dialog}=require('electron'),fs=require('fs'),path=require('path'),crypto=require('crypto');
+const policy=require('../../deploy/core/proof-policy.cjs'),projects=require('../../deploy/core/revival-projects.cjs');
+const root=path.join(policy.root,'watch-ui',crypto.randomUUID());fs.mkdirSync(root,{recursive:true});fs.writeFileSync(path.join(root,'index.js'),'');fs.writeFileSync(path.join(root,'other.js'),'');fs.writeFileSync(path.join(root,'style.css'),'body { color: white; }');fs.writeFileSync(path.join(root,'answer.cjs'),'module.exports=42;');projects.activate(root);
+fs.writeFileSync(path.join(root,'helper.cjs'),'module.exports=n=>n*2;');fs.writeFileSync(path.join(root,'offset.cjs'),'module.exports=0;');fs.writeFileSync(path.join(root,'worker.cjs'),'const {parentPort,workerData}=require("node:worker_threads");parentPort.postMessage(require("./helper.cjs")(workerData));');
+const originalTrust=dialog.showMessageBox;dialog.showMessageBox=async(window,options)=>options.title==='Run local Node project'?{response:1}:originalTrust(window,options);
+let seen=false;app.on('browser-window-created',(_event,window)=>{if(seen)return;seen=true;window.webContents.on('did-finish-load',()=>setTimeout(async()=>{
+ let result;try{await window.webContents.executeJavaScript(fs.readFileSync(path.join(__dirname,'menu-ui.js'),'utf8'));result=await window.webContents.executeJavaScript(fs.readFileSync(path.join(__dirname,'watch-ui.js'),'utf8'));await window.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');fs.writeFileSync(path.join(policy.root,'watch-report.png'),(await captureNativePage(window.webContents)).toPNG());}
+ catch(error){result={passed:false,error:error.message};try{result.display=await window.webContents.executeJavaScript('document.getElementById("proof-output").textContent');result.watches=await window.webContents.executeJavaScript('Array.from(document.querySelectorAll(".watch-result")).map(node=>({status:node.dataset.status,text:node.textContent}))');fs.writeFileSync(path.join(policy.root,'watch-failure.png'),(await captureNativePage(window.webContents)).toPNG());}catch(_){} }
+ dialog.showMessageBox=originalTrust;const node=require('../../deploy/core/revival-node.cjs'),js=require('../../deploy/core/proof-js.cjs');await node.shutdown();await js.shutdown();result.cleanup={node:node.activeCount(),js:js.activeCount(),...js.diagnostics()};delete result.cleanup.recent;result.passed=result.passed&&!result.cleanup.node&&!result.cleanup.js&&!result.cleanup.jobs&&!result.cleanup.pending&&!result.cleanup.helperPid;
+ fs.writeFileSync(path.join(policy.root,'watch-result.json'),JSON.stringify(result,null,2));app.exit(result.passed?0:1);
+ },2200));});setTimeout(()=>app.exit(2),65000);require('../../deploy/core/main.js');

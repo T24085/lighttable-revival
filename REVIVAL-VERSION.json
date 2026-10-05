@@ -1,0 +1,8 @@
+{
+  "version": "0.9.0-revival.1",
+  "channel": "experimental prerelease",
+  "upstreamVersion": "0.9.0",
+  "upstreamDevelop": "000cc9b308296461f4ca8f639e3acf74ae3a86eb",
+  "runtime": "Electron 44.5.1",
+  "platform": "Windows x64"
+}

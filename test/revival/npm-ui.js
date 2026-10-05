@@ -1,0 +1,25 @@
+(async()=>{
+ const checks=[],root=ltProjects.info().current.path,manifest=root+'\\package.json',entry=root+'\\index.js';
+ const check=(name,ok)=>{if(!ok)throw Error(name);checks.push(name);console.info(name);};
+ const command=(name,...args)=>lt.objs.command.exec_BANG_(cljs.core.keyword(name),...args),open=path=>{command('open-path',path);return ltProofUI.connect();};
+ const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),until=async(predicate,ms=6000)=>{const end=Date.now()+ms;while(!predicate()){if(Date.now()>end)throw Error('npm editor condition timed out');await sleep(20);}};
+ open(entry);await sleep(40);check('Unused npm and browser sections stay hidden in Activity',getComputedStyle(document.getElementById('npm-activity')).display==='none'&&getComputedStyle(document.getElementById('preview-activity')).display==='none');testMenuClick('Install dependencies');let result=await ltNpmUI.pending();
+ check('Declining project trust prevents dependency installation',result.accepted===false&&result.error.includes('cancel')&&!ltProof.exists(root+'\\package-lock.json'));
+ testMenuClick('Install dependencies');result=await ltNpmUI.pending();
+ check('The native menu installs actual project dependencies and captures success',result.status==='exited'&&result.exitCode===0&&ltProof.exists(root+'\\node_modules\\lt-editor-dependency\\installed.txt'));
+ check('Install completion appears in Activity with verified process cleanup',document.getElementById('npm-status').textContent.includes('Dependencies installed')&&result.memory.hardPrivateCommit&&result.memory.processExited);
+ const code=open(entry);code.setValue('require("lt-editor-dependency");');command('save');testMenuClick('Run file with Node');const evaluated=await ltProofUI.pending();check('An installed package is usable through the existing Node editor command',evaluated.accepted&&evaluated.result.result==='42');
+ const json=open(manifest);json.setValue('{}');testMenuClick('Install dependencies');result=await ltNpmUI.pending();check('Unsaved package.json is rejected without writing the editor buffer',result.accepted===false&&document.getElementById('npm-status').textContent.includes('Save package.json')&&ltProof.read(manifest).includes('lt-editor-dependency'));
+ json.setValue(ltProof.read(manifest));
+ const menu=testMenuItem('Development server'),dev=menu.submenu.items.find(item=>item.label==='dev');dev.click();result=await ltNpmUI.pending();await until(()=>document.getElementById('npm-output').textContent.includes('SERVER_READY'));
+ check('The native Development server submenu starts a real long-lived npm script',result.status==='running'&&ltNpmUI.state().script==='dev'&&ltNpmUI.state().budgetMs===900000);
+ let ambiguous=false;try{testMenuItem('dev');}catch(error){ambiguous=error.message.includes('Ambiguous');}check('Persistent and bounded npm commands have distinct menu paths',ambiguous&&testMenuItem(['Run','Development server','dev'])!==testMenuItem(['Run','npm scripts','dev']));
+ check('Activity shows streamed server output, remaining lifetime and saved input identity',document.getElementById('npm-output').textContent.includes('http://127.0.0.1:')&&document.getElementById('npm-deadline').textContent.includes('Expires in')&&document.getElementById('npm-activity').textContent.includes('Saved inputs at launch'));
+ open(entry);await sleep(40);testMenuClick('Run file with Node');await ltProofUI.pending();check('Running a Node file preserves the active development-server session',ltNpmUI.state().status==='running');
+ testMenuClick('Stop');await ltNpmUI.pending();check('Native Stop closes the development-server process family',ltNpmUI.state().status==='stopped'&&ltNpmUI.state().memory.processExited);
+ await ltNpmUI.startServer('fail');await until(()=>ltNpmUI.state().status==='failed');check('A failed development script retains its original error output',document.getElementById('npm-output').textContent.includes('server editor failed')&&document.getElementById('npm-output').textContent.includes('failed.cjs:1'));
+ await ltNpmUI.startServer('dev');await until(()=>ltNpmUI.state().output.stdout.includes('SERVER_READY'));check('A repaired development workflow starts successfully after failure',ltNpmUI.state().status==='running');
+ check('Activity contains no npm action buttons',!document.getElementById('npm-activity').querySelector('button'));
+ testMenuClick('Stop npm operation');await ltNpmUI.pending();check('The dedicated native npm Stop action releases its quota',ltNpmUI.state().status==='stopped'&&ltNpmUI.state().memory.processExited);
+ return {passed:true,checks};
+})();

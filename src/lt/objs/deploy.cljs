@@ -94,11 +94,12 @@
                                                                   (cb e r body)))))
 
 (defn untar [from to cb]
-  (let [t (.createReadStream fs from)]
-    (.. t
-        (pipe (.createGunzip zlib))
-        (pipe (.Extract tar (js-obj "path" to)))
-        (on "end" cb))))
+  (.mkdir shell "-p" to)
+  (-> (.x tar (js-obj "file" from "cwd" to "strict" true "preservePaths" false))
+      (.then (fn [_] (cb)))
+      (.catch (fn [error]
+                (notifos/done-working)
+                (console/error error)))))
 
 
 (defn move-tmp []

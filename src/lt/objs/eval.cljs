@@ -8,6 +8,7 @@
             [lt.objs.files :as files]
             [lt.objs.editor.pool :as pool]
             [lt.objs.clients :as clients]
+            [lt.objs.clients.javascript :as javascript]
             [lt.util.cljs :refer [->dottedkw]]
             [lt.objs.sidebar.command :as cmd]
             [lt.objs.notifos :as notifos]
@@ -486,21 +487,61 @@
 (cmd/command {:command :clear-inline-results
               :desc "Eval: Clear inline results"
               :exec (fn []
+                      (when (exists? js/ltProofUI)
+                        (.clearResults js/ltProofUI))
                       (when-let [ed (pool/last-active)]
-                        (doseq [[_ w] (:widgets @ed)]
-                          (object/raise w :clear!))))})
+                        (object/merge! ed {:javascript-clearing true})
+                        (try
+                          (doseq [[_ w] (:widgets @ed)]
+                            (object/raise w :clear!))
+                          (finally (object/merge! ed {:javascript-clearing false})))))})
+
+(cmd/command {:command :javascript.run-file
+              :desc "Run: Run JavaScript file"
+              :exec #(.perform js/ltProofUI "file")})
+
+(cmd/command {:command :javascript.run-selection
+              :desc "Run: Run JavaScript selection or line"
+              :exec #(.perform js/ltProofUI "selection")})
+
+(cmd/command {:command :javascript.run-node
+              :desc "Run: Run file with Node"
+              :exec #(.runNode js/ltProofUI)})
+
+(cmd/command {:command :javascript.run-script
+              :desc "Run: Run npm script"
+              :hidden true
+              :exec (fn [script] (.runNode js/ltProofUI script))})
+
+(cmd/command {:command :javascript.arithmetic
+              :desc "Run: Evaluate arithmetic"
+              :exec #(.perform js/ltProofUI "arithmetic")})
+
+(cmd/command {:command :javascript.example-report
+              :desc "Help: Open order report example"
+              :exec #(.openSample js/ltProofUI "order-report.js")})
+
+(cmd/command {:command :javascript.example-calculation
+              :desc "Help: Open calculation example"
+              :exec #(.openSample js/ltProofUI "calculation.js")})
 
 (cmd/command {:command :eval-editor
               :desc "Eval: Eval editor contents"
               :exec (fn []
                       (when-let [ed (pool/last-active)]
-                        (object/raise ed :eval)))})
+                        (if (and (exists? js/ltProofUI)
+                                 (.hasExecutionEditor js/ltProofUI ed))
+                          (.runEditor js/ltProofUI ed "file")
+                          (object/raise ed :eval))))})
 
 (cmd/command {:command :eval-editor-form
               :desc "Eval: Eval a form in editor"
               :exec (fn []
                       (when-let [ed (pool/last-active)]
-                        (object/raise ed :eval.one)))})
+                        (if (and (exists? js/ltProofUI)
+                                 (.hasExecutionEditor js/ltProofUI ed))
+                          (.runEditor js/ltProofUI ed "selection")
+                          (object/raise ed :eval.one))))})
 
 (cmd/command {:command :eval.custom
               :desc "Eval: Eval custom expression in editor"
@@ -513,6 +554,12 @@
 (cmd/command {:command :eval.cancel-all!
               :desc "Eval: Cancel evaluation for the current client"
               :exec (fn []
+                      (when (exists? js/ltProofUI)
+                        (.stop js/ltProofUI))
+                      (when (exists? js/ltPreview)
+                        (.stop js/ltPreview))
+                      (when (exists? js/ltNpmUI)
+                        (.stop js/ltNpmUI))
                       (when-let [ed (pool/last-active)]
                         (when (:client @ed)
                           (doseq [[_ client] (:client @ed)]
@@ -525,3 +572,12 @@
                         (doseq [client (-> @ed :client vals)]
                           (clients/close! client))))})
 
+(cmd/command {:command :project.install-dependencies
+              :desc "Project: Install dependencies with npm"
+              :exec (fn [] (.install js/ltNpmUI))})
+(cmd/command {:command :project.start-development-server
+              :desc "Project: Start development server with an npm script"
+              :exec (fn [script] (.startServer js/ltNpmUI script))})
+(cmd/command {:command :project.stop-npm
+              :desc "Project: Stop npm operation"
+              :exec (fn [] (.stop js/ltNpmUI))})

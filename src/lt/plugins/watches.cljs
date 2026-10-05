@@ -64,8 +64,8 @@
                         (let [id (-> (gensym "watch")
                                      (str))
                               mark (ed/mark this (:from sel) (:to sel) {:className (or (:class opts) "watched")
-                                                                        :inclusiveLeft false
-                                                                        :inclusiveRight false})
+                                                                        :inclusiveLeft true
+                                                                        :inclusiveRight true})
                               res (inline this (merge {:type :watch :id id} opts) (:to sel))]
                           (.on mark "hide" (fn []
                                              (object/raise res :clear!)))
@@ -90,7 +90,17 @@
                       (when (ed/selection? this)
                         (let [cursor (ed/->cursor this)]
                           (ed/set-selection this cursor cursor)))
-                      (object/raise this :eval.one)))
+                      (when-not (:javascript-clearing @this)
+                        (if (and (exists? js/ltProofUI)
+                                 (or (object/has-tag? this :editor.javascript)
+                                     (object/has-tag? this :editor.html)))
+                          (if (and (exists? js/ltPreview)
+                                   (.handlesWatch js/ltPreview this))
+                            (.watchChanged js/ltPreview this)
+                            (if (object/has-tag? this :editor.html)
+                              (.open js/ltPreview (-> @this :info :path) false)
+                              (.runEditor js/ltProofUI this "file")))
+                          (object/raise this :eval.one)))))
 
 (cmd/command {:command :editor.watch.watch-selection
               :desc "Editor: Watch selection"
@@ -121,4 +131,3 @@
                       (when-let [ed (pool/last-active)]
                         (doseq [w (vals (:watches @ed))]
                           (object/raise (:inline-result w) :clear!))))})
-

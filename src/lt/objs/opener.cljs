@@ -15,6 +15,7 @@
             [lt.objs.console :as console]
             [lt.objs.notifos :as notifos]
             [lt.objs.files :as files]
+            [clojure.string :as string]
             [lt.util.dom :as dom]
             [lt.util.cljs :refer [->dottedkw]])
   (:use [singultus.binding :only [bound map-bound]])
@@ -34,11 +35,15 @@
 
 (behavior ::open-transient-editor
           :triggers #{:new!}
-          :reaction (fn [this path dirty?]
+          :reaction (fn [this path dirty? filename]
                       (let [last (pool/last-active)
                             info (merge {:mime "plaintext" :tags [:editor.plaintext] :name (str "untitled-"
                                                                                                 (swap! untitled-count inc))}
-                                        (path->info path))
+                                        (path->info path)
+                                        (when filename
+                                          (merge {:name (files/basename filename)}
+                                                 (when (files/path->type filename)
+                                                   (dissoc (path->info filename) :path)))))
                             ed (pool/create info)]
                         (object/add-tags ed [:editor.transient])
                         (object/merge! ed {:dirty dirty?})
@@ -66,24 +71,51 @@
           :triggers #{:save-as!}
           :reaction (fn [this path]
                       (when (not (empty? path))
-                        (let [type (files/path->type path)
+                        (let [old-path (-> @this :info :path)
+                              old-doc (:doc @this)
+                              other-editors (remove #(identical? this %) (pool/by-path path))
+                              linked? (and old-doc
+                                           (or (:root @old-doc)
+                                               (> (count (:sub-docs @old-doc)) 1)))
+                              type (files/path->type path)
                               prev-tags (-> @this :info :tags)
-                              mode (files/path->mode path)
-                              neue-doc (doc/create {:doc (editor/get-doc this)
-                                                    :line-ending files/line-ending
-                                                    :mtime (files/stats path)
-                                                    :mime mode})]
-                          (when (:doc @this)
-                            (object/raise (:doc @this) :close.force))
-                          (doc/register-doc neue-doc path)
-                          (object/update! this [:info] merge (path->info path))
-                          (object/merge! this {:dirty true
-                                               :doc neue-doc})
-                          (editor/set-mode this mode)
-                          (object/remove-tags this (conj prev-tags :editor.transient))
-                          (object/add-tags this (conj (:tags type) :editor.file-backed))
-                          (object/raise this :save-as)
-                          (object/raise this :save)))))
+                              mode (files/path->mode path)]
+                          (cond
+                            (and old-doc old-path
+                                 (= (string/lower-case old-path) (string/lower-case path)))
+                            (object/raise this :save)
+
+                            (seq other-editors)
+                            (files/save-error path (js/Error. "This destination is already open. Close that editor before using Save As.") nil)
+
+                            linked?
+                            (files/save-error path (js/Error. "Close the linked views before saving this document under another name.") nil)
+
+                            :else
+                            (fed/save-to! this path
+                              (fn [content cb current?]
+                                (when (current?) (files/save path content cb)))
+                              (fn [content]
+                                (let [line-ending (or (-> @this :info :line-ending) files/line-ending)
+                                      neue-doc (doc/create {:doc (editor/get-doc this)
+                                                            :saved-content content
+                                                            :line-ending line-ending
+                                                            :mtime (files/stats path)
+                                                            :mime mode})]
+                                  (when old-doc
+                                    (doc/unregister-doc old-doc old-path)
+                                    (object/raise old-doc :close.force))
+                                  (doc/register-doc neue-doc path)
+                                  (object/update! this [:info] merge (path->info path) {:line-ending line-ending})
+                                  (object/merge! this {:doc neue-doc})
+                                  (editor/set-mode this mode)
+                                  (object/remove-tags this (conj prev-tags :editor.transient))
+                                  (object/add-tags this (conj (:tags type) :editor.file-backed))
+                                  (when (and (exists? js/ltProofUI) (.-identityChanged js/ltProofUI))
+                                    (.identityChanged js/ltProofUI this))
+                                  (object/raise this :save-as)))
+                              (into (apply disj (:tags @this) (conj prev-tags :editor.transient))
+                                    (conj (:tags type) :editor.file-backed))))))))
 
 (behavior ::check-read-only
           :desc "Opener: check if file is read only"
@@ -212,7 +244,9 @@
 (cmd/command {:command :new-file
               :desc "File: New file"
               :exec (fn [dirty?]
-                      (object/raise opener :new! nil dirty?))})
+                      (if (and (exists? js/ltProjects) (.-newUntitled js/ltProjects))
+                        (.newUntitled js/ltProjects dirty?)
+                        (object/raise opener :new! nil dirty?)))})
 
 (cmd/command {:command :open-file
               :desc "File: Open file"

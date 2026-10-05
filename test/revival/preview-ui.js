@@ -1,0 +1,28 @@
+(async()=>{
+ const checks=[],root=ltProjects.info().current.path,entry=root+'\\index.html',script=root+'\\app.js';
+ const check=(name,ok)=>{if(!ok)throw Error(name);checks.push(name);console.info(name);};
+ const command=(name,...args)=>lt.objs.command.exec_BANG_(cljs.core.keyword(name),...args),open=path=>{command('open-path',path);return ltProofUI.connect();},sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+ const html=open(entry);await sleep(40);check('Idle browser preview leaves Activity free of unused content',getComputedStyle(document.getElementById('preview-activity')).display==='none');testMenuClick('Preview file');let result=await ltPreview.pending();
+ check('Native Run menu opens project HTML in an original Light Table tab',result.status==='running'&&document.querySelector('.revival-preview-slot')&&cljs.core.clj__GT_js(cljs.core.get(cljs.core.deref(lt.objs.tabs.active_tab()),cljs.core.keyword('name')))==='Browser preview');
+ check('Preview output identifies exact sources and the verified quota',result.memory.hardPrivateCommit&&result.memory.limitBytes===1073741824&&document.getElementById('preview-activity').textContent.includes('app.js'));
+ let code=open(script);code.setValue('document.getElementById("revenue").textContent=prices.reduce((a,b)=>a+b,0);');code.setSelection({line:0,ch:0},{line:0,ch:code.getLine(0).length});lt.objs.menu.main_menu();testMenuClick('Evaluate selection in preview');result=await ltPreview.pending();
+ check('Browser selection evaluates against existing page globals and DOM',result.result==='42'&&document.getElementById('preview-result').textContent==='42');
+ await ltPreview.checkSources();check('Unsaved editor changes mark the browser snapshot stale',ltPreview.state().stale&&document.getElementById('preview-activity').dataset.status==='stale');
+ await ltPreview.evaluateSelection();check('Evaluating a selection preserves the stale state of the loaded page',ltPreview.state().stale&&document.getElementById('preview-activity').dataset.status==='stale');
+ code.setValue('var prices=[13,30];document.getElementById("revenue").textContent=prices.reduce((a,b)=>a+b,0);');testMenuClick('Refresh preview');result=await ltPreview.pending();
+ check('Refresh uses current unsaved JavaScript and resets stale status',result.status==='running'&&!result.stale&&result.project.files.find(item=>item.name==='app.js').origin==='editor');
+ check('Preview does not silently save changed project source',ltProof.read(script).includes('var prices=[12,30]'));
+ result=await ltBrowserPreview.evaluate('document.getElementById("revenue").textContent');check('The refreshed DOM reflects current project code',result.result==='"43"');
+ open(script).setValue('throw new Error("browser editor failed");');await ltPreview.refresh();check('Initial page errors appear as linked original editor locations',document.querySelector('.preview-error-link')?.textContent.includes('app.js:1:'));
+ document.querySelector('.preview-error-link').click();check('Clicking a browser error opens its original editor',ltProofUI.connect().getValue().includes('browser editor failed')&&ltProofUI.connect().getCursor().line===0);
+ code=ltProofUI.connect();code.setValue('var prices=[12,30];document.body.dataset.recovered="yes";');await ltPreview.refresh();result=await ltBrowserPreview.evaluate('document.body.dataset.recovered');check('The preview recovers after fixing a page error',result.result==='"yes"');
+ check('Activity has no browser action buttons',!document.getElementById('preview-activity').querySelector('button'));
+ lt.objs.menu.main_menu();testMenuClick('Stop');await ltPreview.pending();check('Native Stop ends browser execution and reports process cleanup',ltPreview.state().status==='stopped'&&ltPreview.state().memory.processExited);
+ await ltPreview.open(entry);code=open(script);code.setValue('new Promise(resolve=>setTimeout(()=>resolve(42),1000));');code.setSelection({line:0,ch:0},{line:0,ch:code.getLine(0).length});const oldEvaluation=ltPreview.evaluateSelection();await sleep(30);const replacement=ltPreview.open(entry);await oldEvaluation;await replacement;check('Replacing a pending browser evaluation cannot overwrite the newer preview',ltPreview.state().status==='running'&&ltPreview.state().project.entry===entry);
+ open(script);
+ command('editor.open-current-file-in-browser');result=await ltPreview.pending();check('The original Open current file in browser command uses the restored preview',result.status==='running');
+ const previewTab=lt.objs.tabs.active_tab(),previewSlot=document.querySelector('.revival-preview-slot[data-preview-id]');lt.object.raise(previewTab,cljs.core.keyword('close'));await ltPreview.pending();check('Closing the original preview tab stops its renderer',ltPreview.state().status==='stopped'&&ltPreview.state().memory.processExited&&previewSlot&&!previewSlot.isConnected&&!document.querySelector('.revival-preview-slot[data-preview-id]'));
+ open(script).setValue('var prices=[12,30];document.getElementById("total").onclick=()=>document.getElementById("revenue").textContent=prices.reduce((a,b)=>a+b,0);console.log("DOM app ready");');open(entry);await ltPreview.open();await sleep(120);
+ check('Browser console displays project output without Electron startup diagnostics',document.getElementById('preview-console').textContent==='DOM app ready');
+ return {passed:true,checks};
+})();

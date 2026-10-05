@@ -1,0 +1,38 @@
+'use strict';
+process.env.LT_REVIVAL_TEST='1';
+const {app,BrowserWindow}=require('electron'),fs=require('fs'),path=require('path'),crypto=require('crypto'),assert=require('assert/strict');
+const core='../../deploy/core/',policy=require(core+'proof-policy.cjs'),projects=require(core+'revival-projects.cjs'),preview=require(core+'revival-preview.cjs'),memory=require(core+'proof-memory.cjs');
+const base=path.join(policy.root,'hot-fixtures'),root=path.join(base,crypto.randomUUID()),before=fs.existsSync(projects.statePath)?fs.readFileSync(projects.statePath):null;
+fs.mkdirSync(root,{recursive:true});fs.writeFileSync(path.join(root,'project-state-before.bin'),before||'');projects.activate(root);
+const entry=path.join(root,'index.html'),script=path.join(root,'scene.js'),css=path.join(root,'style.css');
+const html='<!doctype html><html><head><link rel="stylesheet" href="style.css"></head><body><h1 id="title">Original</h1><input id="input" value="default"><canvas id="scene" width="100" height="100"></canvas><script src="scene.js"></script></body></html>';
+const source='const speed=1;\nconst color="#00ff00";\nconst model={ticks:0,angle:0};\nwindow.initialModel=model;\nfunction tick(){model.ticks++;model.angle+=speed;document.querySelector("canvas").getContext("2d").fillStyle=color;}\nfunction check(){return 42;}\nwindow.initialCallback=tick;\nsetInterval(tick,50);';
+fs.writeFileSync(entry,html);fs.writeFileSync(script,source);fs.writeFileSync(css,'h1{color:rgb(0,128,0)}');
+const result={passed:false,checks:[],observations:[]};let window,ended=false;
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const check=async(label,fn)=>{await fn();result.checks.push(label);console.log(label);};
+const read=async(expression)=>{const value=await preview.view(1).webContents.debugger.sendCommand('Runtime.evaluate',{expression,returnByValue:true,timeout:1500});assert(!value.exceptionDetails);return value.result.value;};
+const start=(code=source,page=html,style='h1{color:rgb(0,128,0)}')=>preview.start(1,{path:entry,liveEdit:true,liveBudgetMs:60000,requestId:crypto.randomUUID(),bounds:{x:0,y:0,width:500,height:360,visible:true},buffers:[{path:entry,source:page},{path:script,source:code},{path:css,source:style}]},window);
+async function finish(error){if(ended)return;ended=true;clearTimeout(deadline);if(error)result.error=error.stack;try{await preview.shutdown();if(window&&!window.isDestroyed())window.destroy();await memory.stop();result.cleanup={active:preview.activeCount(),...memory.status()};if(before)fs.writeFileSync(projects.statePath,before);else if(fs.existsSync(projects.statePath))fs.unlinkSync(projects.statePath);result.projectRestored=before?fs.readFileSync(projects.statePath).equals(before):!fs.existsSync(projects.statePath);result.diskUnchanged=fs.readFileSync(script,'utf8')===source&&fs.readFileSync(entry,'utf8')===html;const relative=path.relative(base,root);assert(relative&&!relative.startsWith('..')&&!path.isAbsolute(relative));fs.rmSync(root,{recursive:true,force:true});result.tempRemoved=!fs.existsSync(root);result.passed=!error&&result.projectRestored&&result.diskUnchanged&&result.tempRemoved&&!result.cleanup.active&&!result.cleanup.jobs&&!result.cleanup.pending&&!result.cleanup.helperPid;}catch(reason){result.cleanupError=reason.stack;}fs.writeFileSync(path.join(policy.root,'hot-view-result.json'),JSON.stringify(result,null,2));app.exit(result.passed?0:1);}
+const deadline=setTimeout(()=>finish(Error('Hot view proof exceeded 45000 ms')),45000);
+app.on('window-all-closed',()=>{});
+app.on('before-quit',event=>{if(!ended)event.preventDefault();});
+app.whenReady().then(async()=>{try{
+ window=new BrowserWindow({width:800,height:600,show:false,webPreferences:{sandbox:true}});await window.loadURL('about:blank');window.show();
+ let initial;await check('Running classic scene has a verified 1 GiB renderer quota',async()=>{initial=await start();assert(initial.memory.hardPrivateCommit&&initial.memory.limitBytes===1024*1024*1024);await sleep(300);assert(await read('model.ticks')>1);});
+ await read('window.savedInput=document.getElementById("input");savedInput.value="typed value";window.savedCanvas=document.querySelector("canvas");window.beforeTicks=model.ticks;void 0');
+ const updated=source.replace('speed=1','speed=2').replace('model.angle+=speed','model.angle+=speed*3');
+ await check('Function and constant edits preserve renderer, scene object, callback and counter',async()=>{const next=await start(updated);assert.equal(next.id,initial.id);assert.equal(next.rendererPid,initial.rendererPid);assert.equal(next.liveUpdate.kind,'hot');await sleep(150);assert(await read('model===initialModel&&initialCallback===tick&&model.ticks>beforeTicks'));result.observations.push({initial,next});});
+ await check('Running callbacks use the new function body and live constant',async()=>{const delta=await read('(()=>{const before=model.angle;tick();return model.angle-before;})()');assert.equal(delta,6);});
+ const styled='h1{color:rgb(255,0,0)}';
+ await check('CSS changes apply in the existing document',async()=>{const next=await start(updated,html,styled);assert.equal(next.id,initial.id);assert.equal(await read('getComputedStyle(document.getElementById("title")).color'),'rgb(255, 0, 0)');});
+ const page=html.replace('Original','Updated');
+ await check('Markup updates preserve typed input and the existing canvas',async()=>{const next=await start(updated,page,styled);assert.equal(next.id,initial.id);assert(await read('document.getElementById("title").textContent==="Updated"&&savedInput===document.getElementById("input")&&savedInput.value==="typed value"&&savedCanvas===document.querySelector("canvas")'));});
+ await check('Invalid source retains the previous working program and its state',async()=>{await assert.rejects(start(updated+'\nfunction broken(',page,styled),SyntaxError);assert.equal(preview.status(1).id,initial.id);assert(await read('model===initialModel'));});
+ const errorSource=updated.replace('return 42','throw Error("hot source failure")');
+ await check('Hot function failures link to the exact updated source',async()=>{await start(errorSource,page,styled);await assert.rejects(preview.evaluate(1,'check()'),error=>error.location?.path===script&&error.location.line===6&&error.location.source===errorSource);});
+ await check('Initialization edits restart explicitly instead of claiming state preservation',async()=>{const next=await start(updated.replace('angle:0','angle:25'),page,styled);assert.notEqual(next.id,initial.id);assert.equal(next.liveUpdate.kind,'restart');assert.match(next.liveUpdate.reason,/Initialization/);});
+ await check('Plain module scripts refresh safely while retaining their private bindings',async()=>{const page=html.replace('<script src=','<script type="module" src='),code='const speed=1;let counter=0;function tick(){counter+=speed;document.getElementById("title").textContent=String(counter);}setInterval(tick,50);';const first=await start(code,page,styled),next=await start(code.replace('speed=1','speed=2'),page,styled);assert.notEqual(next.id,first.id);assert.equal(next.liveUpdate.kind,'restart');await sleep(120);assert(Number(await read('document.getElementById("title").textContent'))>0);assert.equal(preview.status(1).errors.length,0);});
+ await check('Stop removes the live renderer and releases its quota',async()=>{await preview.stop(1);assert.equal(preview.activeCount(),0);assert.equal(memory.status().jobs,0);});
+ await finish();
+ }catch(error){await finish(error);}});

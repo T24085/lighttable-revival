@@ -1,5 +1,7 @@
 # Verified First Proof
 
+This is the archived arithmetic-only checkpoint. JavaScript, runtime security preferences and resource limits have since changed. See [the current restoration report](../../REVIVAL.md) for the tested isolated JavaScript, local Node/npm, project and menu workflows. The observations below describe the initial proof only.
+
 Original source ancestor: 000cc9b308296461f4ca8f639e3acf74ae3a86eb.
 
 - Original editor File Open, Chromium text-input edit and original Save passed.

@@ -1,5 +1,5 @@
 (async()=>{
-const checks=[];async function value(source,expected){const r=await ltProof.javascript(source);if(r.rendererPid===window.testEditorPID||!r.rendererPid||!r.sandbox||r.nodeIntegration||r.result!==expected||r.source!==source)throw Error('Incorrect result for '+source);checks.push(source);}
+const checks=[];async function value(source,expected){const r=await ltProof.javascript(source);if(r.rendererPid===window.testEditorPID||!r.rendererPid||!r.sandbox||r.nodeIntegration||r.result!==expected||r.source!==source||!r.memory?.hardPrivateCommit||!r.memory.processExited||r.memory.limitBytes!==1024*1024*1024)throw Error('Incorrect result or quota for '+source);checks.push(source);}
 await value('let prices=[12,30]; function total(xs){return xs.reduce((a,b)=>a+b,0)}; ({total:total(prices),items:prices.length})','{"total":42,"items":2}');
 await value('Promise.resolve(42)','42');
 await value('globalThis.previous=99; previous','99');await value('typeof previous','"undefined"');

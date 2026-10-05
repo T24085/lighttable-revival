@@ -210,11 +210,14 @@
   ;;=> \"\" ; No type information is returned as it is a directory.
   ```"
   [path]
-  (->> path
-       get-file-parts
-       (map #(ext->type (keyword %)))
-       (remove nil?)
-       first))
+  (let [lookup (fn [filename]
+                 (->> filename
+                      get-file-parts
+                      (map #(ext->type (keyword %)))
+                      (remove nil?)
+                      first))]
+    (or (lookup path)
+        (lookup (string/lower-case path)))))
 
 (defn path->mode
   "Given a `path`, returns mime information.
@@ -230,11 +233,14 @@
   (path->mode \"foo\")              ;;=> \"\"
   ```"
   [path]
-  (->> path
-       get-file-parts
-       (map #(ext->mode (keyword %)))
-       (remove nil?)
-       first))
+  (let [lookup (fn [filename]
+                 (->> filename
+                      get-file-parts
+                      (map #(ext->mode (keyword %)))
+                      (remove nil?)
+                      first))]
+    (or (lookup path)
+        (lookup (string/lower-case path)))))
 
 (defn- determine-line-ending [text]
   (let [text (subs text 0 1000)
@@ -340,21 +346,23 @@
     (str f separator)
     (str f)))
 
-(defn- bomless-read [path]
-  "Reads file at `path`, removes occurrences of `\uFEFF`, then returns modified result."
+(defn- read-content [path preserve-source?]
+  "Read original document codepoints, retaining legacy BOM removal for settings reads."
   (let [content (.readFileSync fs path "utf-8")]
-    (string/replace content "\uFEFF" "")))
+    (if preserve-source?
+      content
+      (string/replace content "\uFEFF" ""))))
 
 (defn open
-  "Open file and in callback return map with file's content in `:content`"
-  [path cb]
+  "Open file and return its content to callback. Preserve document source when requested."
+  [path cb & [preserve-source?]]
   (try
-    (let [content (bomless-read path)]
+    (let [content (read-content path preserve-source?)]
       (when content
         (let [e (ext path)]
           (cb {:content content
                :line-ending (determine-line-ending content)
-               :type (or (path->mode path) e)})
+               :type (or (path->mode path) (when e (string/lower-case e)))})
           (object/raise files-obj :files.open content))
         ))
     (catch :default e
@@ -362,31 +370,37 @@
       (when cb (cb nil e)))))
 
 (defn open-sync
-  "Open file and return map with file's content in `:content`."
-  [path]
+  "Open file and return its content. Preserve document source when requested."
+  [path & [preserve-source?]]
   (try
-    (let [content (bomless-read path)]
+    (let [content (read-content path preserve-source?)]
       (when content
         (let [e (ext path)]
           (object/raise files-obj :files.open content)
           {:content content
            :line-ending (determine-line-ending content)
-           :type (or (ext->mode (keyword e)) e)}))
+           :type (or (path->mode path) (when e (string/lower-case e)))}))
         )
     (catch :default e
       (object/raise files-obj :files.open.error path e)
       nil)))
 
+(defn save-error [path error cb]
+  (object/raise files-obj :files.save.error path error)
+  (when cb (cb error)))
+
 (defn save
   "Save `path` with given `content`. Optional callback called after save."
   [path content & [cb]]
-  (try
-    (.writeFileSync fs path content)
-    (object/raise files-obj :files.save path)
-    (when cb (cb))
-    (catch :default e
-      (object/raise files-obj :files.save.error path e)
-      (when cb (cb e)))))
+  (let [error (try
+                (.writeFileSync fs path content)
+                nil
+                (catch :default e e))]
+    (if error
+      (save-error path error cb)
+      (do
+        (object/raise files-obj :files.save path)
+        (when cb (cb nil))))))
 
 (defn append
   "Append `content` to `path`. Optional callback called after append."

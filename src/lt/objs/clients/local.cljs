@@ -5,6 +5,7 @@
             [lt.object :as object]
             [lt.objs.files :as files]
             [lt.objs.clients :as clients]
+            [lt.objs.clients.javascript :as javascript]
             [lt.objs.sidebar.clients :as scl]
             [lt.objs.eval :as eval]
             [lt.objs.console :as console]
@@ -30,17 +31,27 @@
         (catch :default e
           (object/raise clients/clients :message [cb :editor.eval.cljs.exception {:ex e :meta (:meta res)}]))))))
 
+(defn javascript-reply [cb command data]
+  (let [[_ callback] (clients/callback? cb)]
+    (try
+      (object/raise clients/clients :message [cb command data])
+      (finally
+        (when (fn? callback)
+          (swap! clients/callbacks dissoc cb))))))
+
 (defmethod on-message :editor.eval.js [_ data cb]
-  (let [code (-> (:code data)
-                 (eval/append-source-file (:path data)))]
-      (try
-        (object/raise clients/clients :message
-                      [cb
-                       :editor.eval.js.result
-                       {:result (.call js/eval js/window code)
-                        :meta (:meta data)}])
-        (catch :default e
-          (object/raise clients/clients :message [cb :editor.eval.js.exception {:ex e :meta (:meta data)}])))))
+  (-> (javascript/evaluate (:code data) (clj->js {:path (:path data)}))
+      (.then (fn [response]
+               (let [result (try
+                              (.parse js/JSON (.-result response))
+                              (catch :default _ (.-result response)))]
+                 (javascript-reply cb :editor.eval.js.result
+                                   {:result result :meta (:meta data)
+                                    :snapshot (js->clj response :keywordize-keys true)}))))
+      (.catch (fn [error]
+                (javascript-reply cb :editor.eval.js.exception
+                                  {:ex error :meta (:meta data)
+                                   :location (js->clj (.-location error) :keywordize-keys true)})))))
 
 (defmethod on-message :editor.eval.css [_ data cb]
   (let [name (str "local-" (string/replace (:name data) #"[^a-zA-Z0-9]+" "-"))
@@ -70,7 +81,7 @@
                                :type "LT-UI"}))
 
 (scl/add-connector {:name "Light Table UI"
-                    :desc "Connect to this instance of Light Table and evaluate in the local context."
+                    :desc "Connect to the editor for CSS/ClojureScript UI work. JavaScript uses isolated contexts."
                     :connect (fn []
                                (when-not (clients/by-name client-name)
                                  (init)))})

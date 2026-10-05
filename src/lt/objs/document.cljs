@@ -88,7 +88,8 @@
                              info
                              {:doc (linked* doc info) :root doc}))]
      (object/add-tags neue [:document.linked])
-     (object/update! doc [:sub-docs] conj neue))))
+     (object/update! doc [:sub-docs] conj neue)
+     neue)))
 
 (defn ->snapshot [doc]
   (let [d (->cm-doc doc)
@@ -147,28 +148,36 @@
 (defn register-doc [doc path]
   (object/update! manager [:files] assoc path doc))
 
+(defn unregister-doc [doc path]
+  (when (identical? doc (get-in @manager [:files path]))
+    (object/update! manager [:files] dissoc path)))
+
 (defn open [path cb]
-  (files/open path (fn [data]
-                     (let [d (create {:content (:content data)
+  (files/open path (fn [data error]
+                     (when data
+                       (let [d (create {:content (:content data)
+                                      :saved-content (:content data)
                                       :line-ending (:line-ending data)
                                       :mtime (files/stats path)
                                       :mime (:type data)})]
                        (register-doc d path)
                        (when cb
-                         (cb d)))))
+                         (cb d))))) true)
   )
 
 (defn linked-open [ed ldoc-options path cb]
-  (create-sub (:doc @ed) ldoc-options)
   (files/open path (fn [data]
-                     (let [d (-> @ed :doc deref :sub-docs last)]
+                     (when data
+                       (let [d (create-sub (:doc @ed) ldoc-options)]
                        (when cb
-                         (cb d))))))
+                         (cb d))))) true))
 
 (defn check-mtime [prev updated]
-  (if (and prev updated)
-    (= (.getTime (.-mtime prev)) (.getTime (.-mtime updated)))
-    true))
+  (cond
+    (and (nil? prev) (nil? updated)) true
+    (or (nil? prev) (nil? updated)) false
+    :else (and (= (.getTime (.-mtime prev)) (.getTime (.-mtime updated)))
+               (= (.-size prev) (.-size updated)))))
 
 (defui button [label & [cb]]
        [:div.button.right label]
@@ -191,7 +200,13 @@
   (-> (path->doc path) deref :mtime))
 
 (defn update-stats [path]
-  (object/merge! (get-in @manager [:files path]) {:mtime (files/stats path)}))
+  (when-let [doc (path->doc path)]
+    (object/merge! doc {:mtime (files/stats path)})))
+
+(defn update-saved-content [path content]
+  (when-let [doc (path->doc path)]
+    (object/merge! doc {:saved-content content})
+    (update-stats path)))
 
 (defn move-doc [old neue]
   (when-let [old-d (path->doc old)]
@@ -200,17 +215,67 @@
     (update-stats neue)))
 
 (defn save* [path content cb]
-  (files/save path content (fn [data]
-                             (update-stats path)
+  (files/save path content (fn [error]
+                             (when-not error
+                               (update-saved-content path content))
                              (when cb
-                             	(cb data)))))
+                               (cb error)))))
 
-(defn save [path content cb]
-  (let [updated (files/stats path)
-        safe? (check-mtime (->stats path) updated)]
-    (if-not safe?
-      (overwrite-warn #(save* path content cb))
+(defn- disk-state [path]
+  (if-not (files/exists? path)
+    {:exists false}
+    (let [stat (files/stats path)
+          data (when (and stat (.isFile stat)) (files/open-sync path true))]
+      (when-not data
+        (throw (js/Error. "The saved destination could not be read. No changes were written.")))
+      {:exists true :content (:content data)
+       :mtime (.getTime (.-mtime stat)) :size (.-size stat)})))
+
+(defn- checked-save [path content cb valid? disk]
+  (let [error (try
+                (cond
+                  (and valid? (not (valid?)))
+                  (js/Error. "The editor changed before saving. Save again to save the latest edits.")
+
+                  (not= disk (disk-state path))
+                  (js/Error. "The file changed again before saving. Save again to review its latest changes.")
+
+                  :else nil)
+                (catch :default error error))]
+    ;; A caller's post-write exception is not an I/O failure. Do not catch it
+    ;; and invoke that callback again after the destination already committed.
+    (if error
+      (files/save-error path error cb)
       (save* path content cb))))
+
+(defn save [path content cb & [valid? before-write]]
+  (let [prepared (try
+                   (let [doc (path->doc path)
+                         previous (:mtime @doc)
+                         saved-content (:saved-content @doc)
+                         disk (disk-state path)]
+                     {:disk disk
+                      :safe? (and (= (boolean previous) (:exists disk))
+                                  (if (some? saved-content)
+                                    (= saved-content (:content disk))
+                                    (check-mtime previous (files/stats path))))})
+                   (catch :default error {:error error}))]
+    (if-let [error (:error prepared)]
+      (files/save-error path error cb)
+      (let [checked-write (fn [finish]
+                            (checked-save path content
+                                          (fn [error]
+                                            (try
+                                              (when cb (cb error))
+                                              (finally
+                                                (when finish (finish)))))
+                                          valid? (:disk prepared)))
+            write #(if before-write
+                     (before-write checked-write)
+                     (checked-write nil))]
+        (if-not (:safe? prepared)
+          (overwrite-warn write)
+          (write))))))
 
 
 (object/object* ::doc-manager

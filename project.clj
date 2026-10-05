@@ -17,6 +17,15 @@
                                    :output-to "deploy/core/lighttable/bootstrap.js"
                                    :output-dir "deploy/core/lighttable/cljs/"
                                    :pretty-print true}}
+                       {:id "repl"
+                        :source-paths ["src-repl"]
+                        :compiler {:target :nodejs
+                                   :main revival.repl
+                                   :optimizations :simple
+                                   :output-to "deploy/core/revival-cljs-worker.js"
+                                   :output-dir "deploy/core/lighttable/repl-cljs/"
+                                   :pretty-print false
+                                   :static-fns true}}
                        {:id "cljsdeps"
                         :source-paths ["src-cljsdeps"]
                         :compiler {:optimizations :simple

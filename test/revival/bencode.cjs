@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('assert/strict'),{encode,Decoder}=require('../../deploy/core/revival-bencode.cjs');
+const checks=[],check=(label,fn)=>{fn();checks.push(label);};
+check('Bencode strings count UTF-8 bytes',()=>assert.equal(encode('hé').toString(),'3:hé'));
+check('Fragmented UTF-8 dictionaries decode one byte at a time',()=>{const decoder=new Decoder(),messages=[];for(const byte of encode({id:'1',value:'héllo 😀',status:['done']}))messages.push(...decoder.feed(Buffer.from([byte])));assert.equal(messages.length,1);assert.equal(messages[0].value,'héllo 😀');assert.deepEqual(messages[0].status,['done']);});
+check('Coalesced responses retain separate identities',()=>{const messages=new Decoder().feed(Buffer.concat([encode({id:'1',out:'text'}),encode({id:'2',status:['done']})]));assert.equal(messages.length,2);assert.equal(messages[1].id,'2');});
+check('Incomplete prefixes stay buffered until complete',()=>{const decoder=new Decoder();assert.equal(decoder.feed(Buffer.from('d2:id4:ab')).length,0);assert.equal(decoder.feed(Buffer.from('cde'))[0].id,'abcd');});
+check('Dictionary prototype names remain plain data',()=>{const value=new Decoder().feed(Buffer.from('d9:__proto__4:datae'))[0];assert.equal(Object.getPrototypeOf(value),null);assert.equal(value.__proto__,'data');});
+check('Invalid integers and duplicate dictionary keys reject',()=>{assert.throws(()=>new Decoder().feed(Buffer.from('d1:ai1.5ee')));assert.throws(()=>new Decoder().feed(Buffer.from('d1:a1:x1:a1:ye')));});
+check('Invalid UTF-8 rejects without replacement characters',()=>assert.throws(()=>new Decoder().feed(Buffer.from([100,49,58,97,49,58,255,101]))));
+check('Oversized frame declarations and deep containers reject',()=>{assert.throws(()=>new Decoder().feed(Buffer.from('d1:a99999999:')));assert.throws(()=>new Decoder().feed(Buffer.from('d1:a'+'l'.repeat(40)+'e'.repeat(41))));});
+console.log(JSON.stringify({passed:true,checks}));

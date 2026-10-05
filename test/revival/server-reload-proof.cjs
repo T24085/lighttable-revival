@@ -1,0 +1,59 @@
+'use strict';
+process.env.LT_REVIVAL_TEST='1';
+const {app,BrowserWindow}=require('electron'),fs=require('fs'),path=require('path'),crypto=require('crypto'),assert=require('assert/strict');
+const policy=require('../../deploy/core/proof-policy.cjs'),projects=require('../../deploy/core/revival-projects.cjs'),preview=require('../../deploy/core/revival-preview.cjs'),npm=require('../../deploy/core/revival-npm.cjs'),memory=require('../../deploy/core/proof-memory.cjs');
+const root=path.join(policy.root,'server-reload',crypto.randomUUID());fs.mkdirSync(root,{recursive:true});projects.activate(root);
+const entry=path.join(root,'index.html'),manifest=path.join(root,'package.json'),html=factor=>'<!doctype html>\n<script>globalThis.first = 21 * '+factor+';fetch("/record",{method:"POST",body:String(first)});</script>\n<script src="/delay.js"></script>\n<h1>Reload document</h1>';
+fs.writeFileSync(entry,html(2));
+fs.writeFileSync(path.join(root,'server.cjs'),`const http=require('http'),fs=require('fs');const starts=[];
+http.createServer((request,response)=>{const url=new URL(request.url,'http://fixture');
+ if(url.pathname==='/'){response.writeHead(fs.existsSync('broken.txt')?404:200,{'content-type':'text/html'});response.end(fs.readFileSync('index.html'));}
+ else if(url.pathname==='/record'){let value='';request.on('data',chunk=>value+=chunk);request.on('end',()=>{starts.push(value);response.end('ok');});}
+ else if(url.pathname==='/stats'){response.writeHead(200,{'content-type':'application/json'});response.end(JSON.stringify(starts));}
+ else if(url.pathname==='/delay.js'){const send=()=>{response.writeHead(200,{'content-type':'application/javascript'});response.end('globalThis.loaded=true;');};if(fs.existsSync('slow.txt')){const timer=setTimeout(send,2000);response.on('close',()=>clearTimeout(timer));}else send();}
+ else{response.writeHead(404);response.end('missing');}
+}).listen(0,'127.0.0.1',function(){console.log('READY http://127.0.0.1:'+this.address().port)});`);
+fs.writeFileSync(manifest,JSON.stringify({name:'lt-server-reload',version:'1.0.0',private:true,scripts:{dev:'node server.cjs'}}));
+const watches=text=>[{path:entry,source:text,watches:[{id:'first-inline',from:text.indexOf('21 * '),to:text.indexOf('21 * ')+6}]}];
+const owner=916,events=[],checks=[],sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));let host,action,serverURL;
+const notify=event=>{events.push(event);if(action)action(event);},raw=()=>preview.view(owner).webContents;
+const until=async fn=>{const end=Date.now()+6500;while(!await fn()){if(Date.now()>end)throw Error('Reload condition timed out');await sleep(25);}};
+const check=async(label,fn)=>{await fn();checks.push(label);console.log(label);fs.writeFileSync(path.join(policy.root,'server-reload-progress.json'),JSON.stringify({pid:process.pid,checks}));};
+const start=()=>preview.start(owner,{mode:'server',serverId:npm.status(owner).id,url:serverURL,requestId:crypto.randomUUID(),watchFiles:watches(fs.readFileSync(entry,'utf8'))},host,notify);
+const reload=()=>raw().debugger.sendCommand('Runtime.evaluate',{expression:'location.reload();void 0',timeout:1500}).catch(()=>{});
+const stats=async()=>JSON.parse(await (await fetch(new URL('/stats',serverURL))).text());
+const deadline=setTimeout(()=>app.exit(2),65000);
+app.whenReady().then(async()=>{
+ let result;const attach=memory.attach;try{
+  host=new BrowserWindow({show:false,webPreferences:{sandbox:true,nodeIntegration:false,contextIsolation:true,backgroundThrottling:false}});await host.loadURL('data:text/html,<title>Reload host</title>');
+  await npm.start(owner,{kind:'server',path:manifest,source:fs.readFileSync(manifest,'utf8'),script:'dev'});await until(()=>npm.status(owner).output.stdout.includes('READY http://'));serverURL=npm.status(owner).output.stdout.match(/http:\/\/127\.0\.0\.1:\d+/)[0]+'/?variant=1';
+  const initial=await start();await until(async()=>(await stats()).length===1);
+  await check('The first inline instruction executes with a verified quota and watch collector',()=>{assert(initial.memory.hardPrivateCommit);assert.equal(initial.watches[0].result,'42');assert.equal(initial.project.server.url,serverURL);});
+  preview.bounds(owner,{x:12,y:18,width:440,height:330,visible:true});await preview.evaluate(owner,'globalThis.oldOnly=42;undefined');
+  const firstProxy=initial.url;await reload();await until(()=>preview.status(owner)?.status==='running'&&preview.status(owner).id!==initial.id);
+  const first=preview.status(owner);await check('Reload creates a fresh document while preserving its logical request and server',async()=>{assert.equal(first.reloadFrom,initial.id);assert.equal(first.reloadCount,1);assert.equal(first.requestId,initial.requestId);assert.notEqual(first.rendererPid,initial.rendererPid);assert.equal(first.project.server.id,initial.project.server.id);assert.equal(first.project.server.expiresAt,initial.project.server.expiresAt);assert.equal((await preview.evaluate(owner,'typeof oldOnly')).result,'"undefined"');await assert.rejects(fetch(firstProxy));assert.equal(memory.status().jobs,2);});
+  await check('Every replacement receives its quota before first-script watch observations',()=>{const newEvents=events.filter(event=>event.id===first.id);assert(newEvents.some(event=>event.kind==='watches'));for(const event of newEvents.filter(event=>event.kind==='watches'||event.kind==='ready')){assert(event.memory?.hardPrivateCommit);assert.equal(event.memory.limitBytes,1024*1024*1024);}assert.equal(first.watches[0].id,initial.watches[0].id);assert.equal(first.watches[0].result,'42');});
+  await check('Replacement views preserve explicit host bounds and visibility',()=>{assert.deepEqual(preview.view(owner).getBounds(),{x:12,y:18,width:440,height:330});assert(preview.view(owner).getVisible());});
+  await preview.updateWatches(owner,watches(html(3)),first.requestId);fs.writeFileSync(entry,html(3));await reload();await until(()=>preview.status(owner)?.status==='running'&&preview.status(owner).id!==first.id);
+  const second=preview.status(owner);await check('Repeated reload captures the latest authored HTML and retains watch IDs',()=>{assert.equal(second.reloadFrom,first.id);assert.equal(second.reloadCount,2);assert.equal(second.watches[0].result,'63');assert.equal(second.watchSnapshot.specs[0].sourceSha256,crypto.createHash('sha256').update(html(3)).digest('hex'));assert.equal(second.project.server.url,serverURL);});
+  await check('Different documents and outside origins cannot initiate managed reloads',async()=>{for(const url of ['/other.html','http://127.0.0.1:1/']){await raw().debugger.sendCommand('Runtime.evaluate',{expression:'location.href='+JSON.stringify(url)+';void 0',timeout:1500});await sleep(50);assert.equal(preview.status(owner).id,second.id);assert.equal(preview.status(owner).rendererPid,second.rendererPid);}});
+  const pending=preview.evaluate(owner,'new Promise(resolve=>setTimeout(()=>resolve("old response"),1000))').catch(error=>error);await sleep(30);await reload();await until(()=>preview.status(owner)?.status==='running'&&preview.status(owner).id!==second.id);
+  await check('A pending old-document evaluation cannot survive or overwrite its replacement',async()=>{assert((await pending) instanceof Error);assert.equal(preview.status(owner).result,null);assert.equal(preview.status(owner).watches[0].result,'63');});
+  const beforeFailure=preview.status(owner);await until(async()=>(await stats()).length>=4);const codeBefore=(await stats()).length;memory.attach=async()=>{throw Error('Reload quota attachment rejected');};await reload();await until(()=>preview.activeCount()===0&&events.at(-1).kind==='reload-failed');memory.attach=attach;
+  await check('Failed quota attachment prevents replacement project code and releases the old renderer',async()=>{await sleep(100);assert.equal((await stats()).length,codeBefore);assert.match(events.at(-1).reason,/quota attachment rejected/);assert.equal(events.at(-1).id,beforeFailure.id);assert.equal(memory.status().jobs,1);});
+  await start();await check('A new explicit preview recovers after a failed automatic reload',()=>{assert.equal(preview.status(owner).watches[0].result,'63');assert(preview.status(owner).memory.hardPrivateCommit);});
+  let stopping;action=event=>{if(event.kind==='reloading'){action=null;stopping=preview.stop(owner,'Stop during queued reload');}};const queueEvent=events.length;await reload();await until(()=>!!stopping);await stopping;await sleep(100);
+  await check('Stop cancels a queued reload before it creates another renderer',()=>{assert.equal(preview.activeCount(),0);assert.equal(memory.status().jobs,1);assert(!events.slice(queueEvent).some(event=>event.kind==='ready'));});
+  await start();let replacing;const replacedRequest=preview.status(owner).requestId;action=event=>{if(event.kind==='reloading'){action=null;replacing=start();}};await reload();await until(()=>!!replacing);await replacing;await sleep(100);
+  await check('An explicit replacement wins over a queued automatic reload',()=>{assert.notEqual(preview.status(owner).requestId,replacedRequest);assert.equal(preview.status(owner).reloadCount,0);assert.equal(preview.activeCount(),1);assert.equal(memory.status().jobs,2);});
+  fs.writeFileSync(path.join(root,'slow.txt'),'slow');const slowBefore=preview.status(owner);await reload();await until(()=>preview.status(owner)?.id!==slowBefore.id&&preview.status(owner)?.rendererPid>0&&preview.status(owner).status==='loading');const slowRequest=preview.status(owner).requestId;await preview.stop(owner,'Stop while replacement loads');fs.unlinkSync(path.join(root,'slow.txt'));await sleep(150);
+  await check('Stop during replacement loading prevents a late ready event and cleans both previews',()=>{assert.equal(preview.activeCount(),0);assert.equal(memory.status().jobs,1);assert(!events.some(event=>event.requestId===slowRequest&&event.reloadFrom===slowBefore.id&&event.kind==='ready'));});
+  await start();fs.writeFileSync(path.join(root,'broken.txt'),'broken');await reload();await until(()=>preview.activeCount()===0&&events.at(-1).kind==='reload-failed');fs.unlinkSync(path.join(root,'broken.txt'));
+  await check('Unavailable replacement HTML stops visibly without recreating project code',()=>{assert.match(events.at(-1).reason,/did not return HTML/);assert.equal(memory.status().jobs,1);});
+  await start();let stoppingServer;action=event=>{if(event.kind==='reloading'){action=null;stoppingServer=npm.stop(owner,'Server stopped during reload');}};await reload();await until(()=>!!stoppingServer);await stoppingServer;await until(()=>preview.activeCount()===0);await sleep(100);
+  await check('Stopping npm during reload cannot resurrect a renderer, server or quota job',()=>{assert.equal(npm.activeCount(),0);assert.equal(preview.activeCount(),0);assert.equal(memory.status().jobs,0);});
+  result={passed:true,checks,root,events:events.map(({kind,id,reloadFrom,reloadCount,status,reason,rendererPid,memory})=>({kind,id,reloadFrom,reloadCount,status,reason,rendererPid,hardQuota:memory?.hardPrivateCommit}))};
+ }catch(error){result={passed:false,checks,error:error.stack,root,snapshot:preview.status(owner)};console.error(error);}finally{memory.attach=attach;action=null;}
+ await preview.shutdown();await npm.shutdown();await memory.stop();if(host&&!host.isDestroyed())host.destroy();result.cleanup={previewActive:preview.activeCount(),npmActive:npm.activeCount(),...memory.status()};result.passed=result.passed&&result.cleanup.previewActive===0&&result.cleanup.npmActive===0&&result.cleanup.jobs===0&&result.cleanup.pending===0&&!result.cleanup.helperPid;
+ fs.writeFileSync(path.join(policy.root,'server-reload-result.json'),JSON.stringify(result,null,2));clearTimeout(deadline);app.exit(result.passed?0:1);
+}).catch(error=>{console.error(error);app.exit(1);});
