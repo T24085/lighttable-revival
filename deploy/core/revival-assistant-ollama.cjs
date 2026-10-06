@@ -22,6 +22,7 @@ function create({baseURL='http://127.0.0.1:11434',fetchImpl=localRequest}={}){
  }
  async function unload(model,{signal}={}){if(!model)return;return (await request('generate',{model,keep_alive:0,stream:false},signal?AbortSignal.any([signal,AbortSignal.timeout(30000)]):AbortSignal.timeout(30000))).json();}
  async function decision(body,{signal}={}){
+  if(require('./revival-model-policy.cjs').clef(body?.model))throw Error('Clef support is temporarily removed. Choose another decision model or Off.');
   const {validateRequest,validateResponse}=require('./revival-reviewer-protocol.cjs');validateRequest(body);
   const deadline=AbortSignal.timeout(300000),combined=signal?AbortSignal.any([signal,deadline]):deadline;
   try{

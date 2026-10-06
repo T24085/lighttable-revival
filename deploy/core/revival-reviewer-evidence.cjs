@@ -12,7 +12,12 @@ async function collect({wc,status,current,signal,images=false,sampleMs=5000,prog
  const assertCurrent=async()=>{signal?.throwIfAborted();if(wc.isDestroyed()||!await current())throw Error('Review evidence is stale: source or preview changed');};
  const evaluate=async(expression,awaitPromise=false)=>{const r=await wc.debugger.sendCommand('Runtime.evaluate',{expression,awaitPromise,returnByValue:true,timeout:10000});if(r.exceptionDetails)throw Error(r.exceptionDetails.exception?.description||r.exceptionDetails.text);return r.result.value;};
  await assertCurrent();const saved=await evaluate('({x:scrollX,y:scrollY})'),evidence={previewId:status.id,revision:identity(status),url:status.url,capturedAt:new Date().toISOString(),sources:sources(status),sourceBindingSupported:status.project?.mode!=='server'||sourceFiles(status).length>0,viewports:[],images:[]};
+ let focusEmulated=false;
  try{
+  // Keep baseline and current measurements under the same active-page condition.
+  // An occluded preview can otherwise sample Chromium's one-second background
+  // frame cadence instead of the authored program. No OS focus is taken.
+  await wc.debugger.sendCommand('Emulation.setFocusEmulationEnabled',{enabled:true});focusEmulated=true;
   for(const viewport of viewports){
    await assertCurrent();progress('Measuring '+viewport.name+' preview');
    await wc.debugger.sendCommand('Emulation.setDeviceMetricsOverride',{...Object.fromEntries(['width','height','mobile'].map(key=>[key,viewport[key]])),deviceScaleFactor:1});
@@ -22,14 +27,14 @@ async function collect({wc,status,current,signal,images=false,sampleMs=5000,prog
    const key='__lt_review_'+crypto.randomBytes(8).toString('hex');
    await evaluate(`(()=>{const s={frames:[],longTasks:[],start:performance.now(),last:null};window[${JSON.stringify(key)}]=s;s.tick=t=>{if(s.last!==null&&s.frames.length<2000)s.frames.push(t-s.last);s.last=t;s.raf=requestAnimationFrame(s.tick)};s.raf=requestAnimationFrame(s.tick);try{s.observer=new PerformanceObserver(list=>{for(const e of list.getEntries())if(s.longTasks.length<200)s.longTasks.push(e.duration)});s.observer.observe({type:'longtask',buffered:false})}catch(_){s.unsupported=true}})()`);
    let performance;
-   try{await wait(sampleMs,signal);await assertCurrent();performance=await evaluate(`(()=>{const s=window[${JSON.stringify(key)}],f=s.frames.sort((a,b)=>a-b);return {sampleMs:performance.now()-s.start,frames:f.length,medianFrameMs:f[Math.floor(f.length*.5)]||null,p95FrameMs:f[Math.floor(f.length*.95)]||null,longTasks:s.longTasks.length,longTaskMs:s.longTasks.reduce((a,b)=>a+b,0),supported:!s.unsupported,kind:'browser frame intervals; not application FPS'};})()`);}
+   try{await wait(sampleMs,signal);await assertCurrent();performance=await evaluate(`(()=>{const s=window[${JSON.stringify(key)}],f=s.frames.sort((a,b)=>a-b);return {sampleMs:performance.now()-s.start,frames:f.length,medianFrameMs:f[Math.floor(f.length*.5)]||null,p95FrameMs:f[Math.floor(f.length*.95)]||null,longTasks:s.longTasks.length,longTaskMs:s.longTasks.reduce((a,b)=>a+b,0),supported:!s.unsupported,focusEmulated:true,kind:'browser frame intervals; not application FPS'};})()`);}
    finally{if(!wc.isDestroyed())await evaluate(`(()=>{const s=window[${JSON.stringify(key)}];if(s){cancelAnimationFrame(s.raf);s.observer?.disconnect();delete window[${JSON.stringify(key)}]}})()`).catch(()=>{});}
    const state=await statusNow(status,current);evidence.viewports.push({name:viewport.name,width:viewport.width,height:viewport.height,dom,performance,errors:(state?.errors||[]).map(e=>({message:e.message,location:e.location?{path:e.location.path,line:e.location.line}:null})),logs:(state?.logs||[]).slice(-8),memory:state?.memory});
    if(images){await assertCurrent();const r=await wc.debugger.sendCommand('Page.captureScreenshot',{format:'png',fromSurface:true,captureBeyondViewport:true,clip:{x:0,y:0,width:viewport.width,height:viewport.height,scale:1}});if(!r.data)throw Error('Preview pixels are unavailable');evidence.images.push(r.data);}
   }
   await assertCurrent();return evidence;
  }finally{
-  if(!wc.isDestroyed()){await wc.debugger.sendCommand('Emulation.clearDeviceMetricsOverride');await evaluate('scrollTo('+saved.x+','+saved.y+')');}
+  if(!wc.isDestroyed()){try{await wc.debugger.sendCommand('Emulation.clearDeviceMetricsOverride');await evaluate('scrollTo('+saved.x+','+saved.y+')');}finally{if(focusEmulated&&!wc.isDestroyed())await wc.debugger.sendCommand('Emulation.setFocusEmulationEnabled',{enabled:false});}}
  }
 }
 async function statusNow(fallback,current){return typeof current.status==='function'?current.status():fallback;}

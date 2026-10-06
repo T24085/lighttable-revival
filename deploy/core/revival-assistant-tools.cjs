@@ -6,14 +6,14 @@ const definitions=[
  definition('list_files','List a directory. Skips generated folders; returns paths for targeted reads.',{path:string,depth:integer}),
  definition('search_files','Search text in a directory, returning matching lines and paths.',{query:string,path:string},['query']),
  definition('read_file','Read current unsaved editor content when open, otherwise disk. Read before editing. For truncated results continue with next_read; start_column is a zero-based character offset on start_line.',{path:string,start_line:integer,end_line:integer,start_column:integer},['path']),
- definition('write_file','Create or replace a text file and save it. Existing files must have been read; stale edits are rejected.',{path:string,content:string,expected_sha256:string},['path','content']),
+ definition('write_file','Create a missing text file, including parent directories, or replace a previously read file and save it. Do not precreate empty files with shell commands. Existing files must have been read; stale edits are rejected.',{path:string,content:string,expected_sha256:string},['path','content']),
  definition('edit_file','Replace one exact text occurrence and save. Read the file first.',{path:string,old_text:string,new_text:string,expected_sha256:string},['path','old_text','new_text']),
  definition('rename_file','Rename a previously read file without overwriting another file.',{path:string,new_path:string},['path','new_path']),
  definition('delete_file','Delete a previously read file. Its prior state is journaled.',{path:string},['path']),
  definition('create_directory','Create directories, including missing parent directories.',{path:string},['path']),
- definition('create_project','Create an empty project at a new absolute or relative directory and open it in Light Table.',{path:string},['path']),
+ definition('create_project','Create and open a new project directory. template=vite-react-tailwind creates a configured React TypeScript + Vite + Tailwind v4 app with journaled source files. Run npm install then npm run build and a background npm run dev for its server preview. The default empty template creates no files.',{path:string,template:{type:'string',enum:['empty','vite-react-tailwind']}},['path']),
  definition('open_file','Open a file in the original editor.',{path:string},['path']),
- definition('run_command','Run a PowerShell command with Windows user permissions. Use background=true for development servers. Return actual output and exit status. Write application source with file tools so changes are tracked.',{command:string,cwd:string,background:boolean,purpose:{type:'string',enum:['command','setup','build','test','server']}},['command']),
+ definition('run_command','Run non-interactive PowerShell 7 on Windows. There is no terminal input: use explicit CLI flags (Vite --no-interactive) and inspect results. Bash touch is unavailable; create sources with write_file. Use background=true for servers. A cancelled scaffold is a failure even at exit 0. Read installed package versions before configuring them.',{command:string,cwd:string,background:boolean,purpose:{type:'string',enum:['command','setup','build','test','server']}},['command']),
  definition('command_status','Inspect a command or background server, including output and exit status.',{id:string},['id']),
  definition('stop_command','Stop an assistant-owned command and its child processes.',{id:string},['id']),
  definition('start_preview','Show a captured HTML/JS file or a running assistant background server beside the code. For a server supply its job_id and printed loopback URL.',{path:string,job_id:string,url:string}),
@@ -43,7 +43,12 @@ function create({files,commands,editor,preview,createProject,notify}){
    case 'rename_file':return files.rename(session,resolve(args.path),resolve(args.new_path),run.id);
    case 'delete_file':return files.remove(session,resolve(args.path),run.id);
    case 'create_directory':{const folder=resolve(args.path),existed=fs.existsSync(folder);fs.mkdirSync(folder,{recursive:true});return {path:folder,changed:!existed};}
-   case 'create_project':{const project=await createProject(resolve(args.path));session.root=project.path;await editor('project',{project});return {path:project.path,name:project.name,empty:true};}
+   case 'create_project':{
+    const sources=args.template&&args.template!=='empty'?require('./revival-project-starters.cjs').files(args.template):null;
+    const project=await createProject(resolve(args.path));session.root=project.path;await editor('project',{project});
+    if(sources)for(const [name,source]of Object.entries(sources))await files.change(session,resolve(name),source,options);
+    return {path:project.path,name:project.name,empty:!sources,...(sources?{template:args.template,files:Object.keys(sources),next_steps:['npm install','npm run build','npm run dev -- --host 127.0.0.1'],entry:'src/App.tsx'}:{})};
+   }
    case 'open_file':return editor('open',{path:resolve(args.path)});
    case 'run_command':return commands.start(run.owner,{...args,cwd:resolve(args.cwd||'.')},run.abort.signal);
    case 'command_status':{const value=commands.status(args.id,run.owner);if(!value)throw Error('Unknown assistant-owned command');return value;}

@@ -32,6 +32,7 @@ window.ltAssistantEditor=(()=>{
    case 'preview-close':return ltAssistantUI.previewClose();
    case 'preview-status':return {preview:ltPreview.state(),automatic:!!args.path&&/\.html?$/i.test(args.path)&&key(value(lt.objs.editor.pool.last_active(),'info')&&cljs.core.get(value(lt.objs.editor.pool.last_active(),'info'),kw('path')))===key(args.path)&&ltLive.enabled()&&!ltLive.paused()};
    case 'preview-wait':await new Promise(resolve=>setTimeout(resolve,400));await ltLive.pending();return ltPreview.state();
+   case 'preview-ensure':return ltLive.ensure();
    case 'project-refresh':ltProjects.refresh();return true;
    default:throw Error('Unknown editor action');
   }

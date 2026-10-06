@@ -4,7 +4,8 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto'),Module=require('node:module'),threads=require('node:worker_threads'),children=require('node:child_process'),{fileURLToPath}=require('node:url');
 const {normalizeArgv}=require('./revival-preload-argv.cjs');
 const rawRead=fs.readFileSync.bind(fs),rawWrite=fs.writeFileSync.bind(fs),rawStat=fs.statSync.bind(fs),rawExists=fs.existsSync.bind(fs),rawRename=fs.renameSync.bind(fs),rawUnlink=fs.unlinkSync.bind(fs);
-const base=path.resolve(__dirname,'../..','.revival/node-contexts'),childPreload=path.join(__dirname,'revival-node-child.cjs'),environmentKey='LightTable.revival.node.context';
+const atomicText=require('./revival-atomic-json.cjs').writeText,reportIO={writeFileSync:rawWrite,renameSync:rawRename,unlinkSync:rawUnlink};
+const base=process.env.LOCALAPPDATA&&path.isAbsolute(process.env.LOCALAPPDATA)?path.join(process.env.LOCALAPPDATA,'LightTableRevival/node-contexts'):path.resolve(__dirname,'../..','.revival/node-contexts'),childPreload=path.join(__dirname,'revival-node-child.cjs'),environmentKey='LightTable.revival.node.context';
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
 const nativeNow=Date.now.bind(Date);
 const watchSupport=require('./proof-watches.cjs');
@@ -48,7 +49,7 @@ function persistDiagnostic(config,error){
  const configurationLocation={kind:location.kind,path:location.path,source:location.source,sha256:location.sha256,offset:location.offset};
  const record={key:config.key,pid:process.pid,threadId:threads.threadId,error:String(error.message||error).slice(0,2048),configurationLocation},bytes=JSON.stringify(record);
  if(Buffer.byteLength(bytes)>512*1024)throw Error('Node configuration diagnostic exceeds its report budget');
- const file=path.join(config.family.directory,'diagnostic-'+process.pid+'-'+threads.threadId+'.json');rawWrite(file+'.tmp',bytes);rawRename(file+'.tmp',file);return location;
+ const file=path.join(config.family.directory,'diagnostic-'+process.pid+'-'+threads.threadId+'.json');atomicText(file,bytes,{io:reportIO});return location;
 }
 function diagnosticRecords(config,context){
  if(!config.family||!rawExists(config.family.directory))return [];
@@ -111,7 +112,7 @@ function install(config,secondary=false){
   if(!stateFile||!dirty)return;dirty=false;const bytes=JSON.stringify({key:config.key,pid:process.pid,threadId:threads.threadId,watches:[...watchValues].map(([id,result])=>({id,result})),...(watchValues.failure?{watchFailure:String(watchValues.failure.message||watchValues.failure).slice(0,2048)}:{}),snapshots:[...snapshots.values()],metadata:[...metadata.values()]});if(Buffer.byteLength(bytes)>64*1024*1024)throw Error('Node child snapshot exceeds 64 MiB');
   // The reader sees a complete record even if a worker is terminated while its
   // next record is being written. Each context owns a different file.
-  rawWrite(stateFile+'.tmp',bytes);rawRename(stateFile+'.tmp',stateFile);
+  atomicText(stateFile,bytes,{io:reportIO});
  }
  let lastWatchFlush=0;const watchValues=watchSupport.installNative(config.watch,failed=>{dirty=true;const now=nativeNow();if(failed||!lastWatchFlush||now-lastWatchFlush>=25||process._exiting){lastWatchFlush=now;flush();}});
  // Coalesce repeated expression observations without adding timers or handles.

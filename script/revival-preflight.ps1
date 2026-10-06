@@ -1,7 +1,7 @@
 param([string]$ToolchainRoot,[string]$ReceiptPath,[switch]$PassThru)
 $ErrorActionPreference='Stop'
 $source=Split-Path -Parent $PSScriptRoot
-if(!$ToolchainRoot){$ToolchainRoot=Join-Path $source '.revival\toolchain'}
+if(!$ToolchainRoot){$ToolchainRoot=if($env:LT_TOOLCHAIN_ROOT){$env:LT_TOOLCHAIN_ROOT}else{Join-Path $source '.revival\toolchain'}}
 if(!$ReceiptPath){$ReceiptPath=Join-Path $source '.revival\preflight-result.json'}
 $ToolchainRoot=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ToolchainRoot)
 $ReceiptPath=$ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ReceiptPath)
@@ -69,7 +69,8 @@ $receipt.platform.supported=$supported
 Add-Check 'windows' $supported 'Windows is required for the native execution Job Object quota.'
 if($supported){
  try{
-  $nodeChoice=if($env:LT_NODE_EXECUTABLE){$env:LT_NODE_EXECUTABLE}else{'node.exe'}
+  $portableNode=Join-Path $ToolchainRoot 'node\node.exe'
+  $nodeChoice=if($env:LT_NODE_EXECUTABLE){$env:LT_NODE_EXECUTABLE}elseif(Test-Path -LiteralPath $portableNode){$portableNode}else{'node.exe'}
   $nodePath=Resolve-Executable $nodeChoice
   $nodeOutput=Invoke-VersionProbe $nodePath @('--version')
   $nodeMatch=[regex]::Match($nodeOutput,'(?m)^v(\d+)\.(\d+)\.(\d+)\r?$')
@@ -96,8 +97,9 @@ if($supported){
  try{
   $quotaProgramFiles=$env:ProgramFiles
   if(!$quotaProgramFiles){throw 'ProgramFiles is unavailable; the quota helper PowerShell path cannot be checked.'}
-  $pwshPath=Join-Path $quotaProgramFiles 'PowerShell\7\pwsh.exe'
-  if(!(Test-Path -LiteralPath $pwshPath -PathType Leaf)){throw 'PowerShell 7 is required at ProgramFiles\PowerShell\7\pwsh.exe by the native quota helper.'}
+  $portablePowerShell=Join-Path $ToolchainRoot 'powershell\pwsh.exe'
+  $pwshPath=if($env:LT_POWERSHELL_EXECUTABLE){$env:LT_POWERSHELL_EXECUTABLE}elseif(Test-Path -LiteralPath $portablePowerShell){$portablePowerShell}else{Join-Path $quotaProgramFiles 'PowerShell\7\pwsh.exe'}
+  if(!(Test-Path -LiteralPath $pwshPath -PathType Leaf)){throw 'PowerShell 7 is required. Provide the portable toolchain, install PowerShell 7, or set LT_POWERSHELL_EXECUTABLE.'}
   $pwshOutput=Invoke-VersionProbe $pwshPath @('-NoProfile','-NonInteractive','-Command','$PSVersionTable.PSVersion.ToString()')
   $pwshVersion=$pwshOutput.Trim()
   if($pwshVersion -notmatch '^(\d+)\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$' -or [int]$Matches[1] -lt 7){throw 'The quota helper executable must report PowerShell 7 or newer.'}
@@ -105,8 +107,9 @@ if($supported){
   Add-Check 'powershell' $true 'The exact native quota-helper PowerShell path is available.'
  }catch{Add-Check 'powershell' $false $_.Exception.Message}
  try{
-  $javaSelection=if($env:LEIN_JAVA_CMD){'LEIN_JAVA_CMD'}elseif($env:JAVA_CMD){'JAVA_CMD'}else{'PATH'}
-  $javaChoice=if($env:LEIN_JAVA_CMD){$env:LEIN_JAVA_CMD}elseif($env:JAVA_CMD){$env:JAVA_CMD}else{'java.exe'}
+  $portableJava=Get-ChildItem -LiteralPath $ToolchainRoot -Directory -Filter 'jdk-*' -ErrorAction SilentlyContinue | ForEach-Object {Join-Path $_.FullName 'bin\java.exe'} | Where-Object {Test-Path -LiteralPath $_} | Select-Object -First 1
+  $javaSelection=if($env:LT_JAVA_EXECUTABLE){'LT_JAVA_EXECUTABLE'}elseif($env:LEIN_JAVA_CMD){'LEIN_JAVA_CMD'}elseif($env:JAVA_CMD){'JAVA_CMD'}elseif($portableJava){'portable'}else{'PATH'}
+  $javaChoice=if($env:LT_JAVA_EXECUTABLE){$env:LT_JAVA_EXECUTABLE}elseif($env:LEIN_JAVA_CMD){$env:LEIN_JAVA_CMD}elseif($env:JAVA_CMD){$env:JAVA_CMD}elseif($portableJava){$portableJava}else{'java.exe'}
   $javaPath=Resolve-Executable $javaChoice
   $javaOutput=Invoke-VersionProbe $javaPath @('-version')
   $javaMatch=[regex]::Match($javaOutput,'(?m)^(?:openjdk|java) version "([^"\r\n]{1,80})"')

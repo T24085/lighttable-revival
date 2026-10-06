@@ -50,9 +50,11 @@ window.ltProjects=(()=>{
  function newProject(){return safely(()=>{
   let parent=null;
   const ui=dialog('project-create','Create project','Project name','my-project',name=>{
-   const project=window.ltProjectFiles.create(parent?.token,name);return ()=>activate(project);
+   const project=window.ltProjectFiles.create(parent?.token,name,{template:template.value});return ()=>{activate(project);if(template.value==='vite-react-tailwind')message('Vite + Tailwind created. Automatic live view will install dependencies and open the preview after project execution is allowed.');};
   });
   ui.create.disabled=true;
+  const templateLabel=document.createElement('label'),template=document.createElement('select');template.id='project-template';templateLabel.htmlFor=template.id;templateLabel.textContent='Project template';
+  for(const [value,label]of [['javascript','JavaScript'],['vite-react-tailwind','Vite + React + Tailwind'],['empty','Empty project']]){const option=document.createElement('option');option.value=value;option.textContent=label;template.append(option);}ui.extra.append(templateLabel,template);
   const location=document.createElement('p');location.id='project-location';location.textContent='Choose the folder where the new project will be created.';
   button('project-choose-location','Choose location…',()=>{
    try{ltProofUI.stop();const chosen=window.ltProjectFiles.pickParent();

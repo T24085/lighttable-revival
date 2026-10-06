@@ -6,7 +6,7 @@ const allowedLimits=new Set([192*1024*1024,384*1024*1024,512*1024*1024,defaultLi
 let child=null,ready=null,failure=null;const requests=new Map(),jobs=new Set();
 function start(){if(failure)return Promise.reject(failure);if(ready)return ready;
  ready=new Promise((resolve,reject)=>{
- const exe=path.join(process.env.ProgramFiles||'C:/Program Files','PowerShell','7','pwsh.exe');
+ let exe;try{exe=require('./revival-runtime-paths.cjs').powershell();}catch(error){failure=error;reject(error);return;}
  function lost(error){failure=error;reject(error);for(const request of requests.values()){clearTimeout(request.timer);request.reject(error);}requests.clear();jobs.clear();}
  if(process.platform!=='win32'||!fs.existsSync(exe)){lost(Error('Existing Windows PowerShell 7 is required for the hard memory quota'));return;}
  const temp=path.join(require('./proof-policy.cjs').root,'memory-helper-temp');fs.mkdirSync(temp,{recursive:true});

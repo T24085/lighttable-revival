@@ -3,6 +3,7 @@
 window.ltLive=(()=>{
  const delayMs=350,sessionMs=15*60*1000,bindings=new WeakSet();
  let enabled=window.ltProof.info.autoLiveView!==false,paused=false,pane,slot,label,runButton,timer=null,busy=false,observed=null,lastAttempt=null,root=null,entry=null,expiresAt=0,pending=Promise.resolve(),generation=0,sourceRevision=0,reason='',seenProject=null;
+ let web=null,webChecked=0,automaticRun=null,changingProject=false,projectRevision=0,openedProject=null;
  const kw=value=>cljs.core.keyword(value),info=obj=>obj&&cljs.core.deref(obj)?cljs.core.clj__GT_js(cljs.core.get(cljs.core.deref(obj),kw('info')))||{}:{};
  const pathKey=value=>String(value||'').replace(/\//g,'\\').toLowerCase();
  const within=(file,directory)=>pathKey(file).startsWith(pathKey(directory).replace(/\\+$/,'')+'\\');
@@ -13,7 +14,8 @@ window.ltLive=(()=>{
  const eligible=file=>/\.(?:html?|css|[cm]?js|jsx|[cm]?ts|tsx|svg)$/i.test(file||'');
  function choose(){
   const project=window.ltProjects.info().current?.path,obj=active(),file=info(obj).path;
-  if(!project||!file||!within(file,project)||!eligible(file))return null;
+  if(project){if(Date.now()-webChecked>1000){web=window.ltProjectFiles.preview();webChecked=Date.now();}if(web?.mode&&pathKey(web.root)===pathKey(project))return web;}
+  if(!project||!file||!within(file,project)||!eligible(file))return web&&pathKey(web.root)===pathKey(project)?web:null;
   if(/\.html?$/i.test(file))return {root:project,entry:file};
   if(root===project&&entry&&exists(entry))return {root:project,entry};
   let directory=file.slice(0,Math.max(file.lastIndexOf('\\'),file.lastIndexOf('/')));
@@ -21,9 +23,10 @@ window.ltLive=(()=>{
    for(const name of ['index.html','index.htm']){const candidate=directory+'\\'+name;if(exists(candidate))return {root:project,entry:candidate};}
    const parent=directory.slice(0,Math.max(directory.lastIndexOf('\\'),directory.lastIndexOf('/')));if(parent===directory)break;directory=parent;
   }
-  return null;
+  return web&&pathKey(web.root)===pathKey(project)?web:null;
  }
  function signature(program){
+  if(program.mode)return JSON.stringify(program);
   const snapshot=ltPreview.state()?.project,paths=snapshot?.entry&&pathKey(snapshot.entry)===pathKey(program.entry)?new Set(snapshot.files.filter(item=>item.path).map(item=>pathKey(item.path))):null;
   return JSON.stringify([sourceRevision,pathKey(program.root),pathKey(program.entry),ltPreview.buffers().filter(item=>within(item.path,program.root)&&(!paths||paths.has(pathKey(item.path)))).map(item=>[pathKey(item.path),item.source,item.loader])]);
  }
@@ -33,19 +36,38 @@ window.ltLive=(()=>{
   label.textContent=reason|| (paused?'Paused':busy?'Updating…':'Live');pane.dataset.status=paused?'paused':busy?'updating':'live';
   document.getElementById('live-preview-name').textContent=entry?.split(/[\\/]/).pop()||'';
   runButton.disabled=busy;runButton.textContent=busy?'Running…':'▶ Run';
-  if(paused)slot.textContent='Live view paused. Click Run above to resume.';
+  if(paused)slot.textContent=reason||'Live view paused. Click Run above to resume.';
+  else if(busy&&!ltPreview.isRunning())slot.textContent=reason||'Preparing preview…';
   window.dispatchEvent(new Event('resize'));
  }
  function schedule(){if(!enabled||paused)return;clearTimeout(timer);timer=setTimeout(update,delayMs);}
  async function update(program=choose(),restart=false){
   timer=null;if(!enabled||paused||busy||!program)return;
+  if(program.mode&&(['running','pausing','stopping'].includes(window.ltAssistantUI?.state().state?.status)||document.getElementById('assistant-preview-pane'))){schedule();return;}
   const value=signature(program);if(value===lastAttempt)return;
   if(expiresAt&&Date.now()>=expiresAt){await pause('Live session finished. Click Run above to resume.');return;}
   if(root!==program.root){expiresAt=0;lastAttempt=null;}root=program.root;entry=program.entry;if(!expiresAt)expiresAt=Date.now()+sessionMs;
   const expected=++generation;lastAttempt=value;busy=true;reason='';render();
-  pending=ltPreview.openLive(entry,Math.max(100,expiresAt-Date.now()),restart).then(result=>{
+  const valid=()=>expected===generation&&enabled&&!paused;
+  const progress=text=>{if(valid()){reason=text;render();}};
+  pending=(async()=>{
+   if(program.mode==='setup')throw Error(program.reason);
+   if(program.mode==='server'){
+    const server=await ltNpmUI.automaticServer(program,{valid,progress,claim:id=>{if(valid())automaticRun=id;else ltNpmUI.stopAutomatic(id);}});
+    const deadline=Date.now()+15000;progress('Waiting for Vite…');
+    while(valid()){
+     const state=ltNpmUI.state();if(state?.id!==server.id||state.status!=='running')throw Error(state?.reason||'The development server stopped before its preview opened.');
+     if(/http:\/\/(?:127\.0\.0\.1|localhost|\[::1\]):\d+/.test(state.output?.stdout||''))break;
+     if(Date.now()>deadline)throw Error('Vite has not printed a preview URL. Check its output in Activity, then click Run to retry.');
+     await new Promise(resolve=>setTimeout(resolve,100));
+    }
+    if(!valid())return {accepted:false,reason:'cancelled'};
+    expiresAt=server.expiresAt;webChecked=0;const ready=choose();if(ready?.mode==='server')lastAttempt=signature(ready);return ltPreview.openLiveServer(server.id,entry);
+   }
+   return ltPreview.openLive(entry,Math.max(100,expiresAt-Date.now()),restart);
+  })().then(result=>{
    if(expected!==generation)return result;reason=result?.accepted===false?'Fix the error below to update the live view.':result?.liveUpdate?.kind==='hot'?'Live: state preserved':result?.liveUpdate?.reason?'Live: program restarted':'';return result;
-  }).catch(error=>{if(expected===generation)reason=error.message;return {accepted:false,error:error.message};}).finally(()=>{
+  }).catch(error=>{if(expected===generation){reason=error.message;if(program.mode){paused=true;slot.textContent=reason;}}return {accepted:false,error:error.message};}).finally(()=>{
    if(expected===generation){busy=false;render();if(enabled&&!paused){const next=choose();if(next&&signature(next)!==lastAttempt)schedule();}}
   });return pending;
  }
@@ -54,18 +76,24 @@ window.ltLive=(()=>{
  function scan(){
   if(!window.lt?.objs.editor?.pool||!pane)return;
   for(const obj of objects()){const editor=cm(obj);if(editor&&!bindings.has(editor)){bindings.add(editor);editor.on('change',changed);editor.on('swapDoc',changed);}}
-  if(!enabled||paused)return;
   const project=window.ltProjects.info().current?.path;
-  if(project&&pathKey(project)!==seenProject){seenProject=pathKey(project);const first=project+'\\index.html';if(exists(first)&&!within(info(active()).path,project)){lt.objs.command.exec_BANG_(kw('open-path'),first);ltProofUI.connect()?.focus();}}
+  if(pathKey(project)!==seenProject){
+   seenProject=pathKey(project);generation++;busy=false;clearTimeout(timer);timer=null;observed=null;lastAttempt=null;root=null;entry=null;expiresAt=0;web=null;webChecked=0;reason='';paused=false;changingProject=true;
+   const id=automaticRun;automaticRun=null;const expected=++projectRevision;render();
+   pending=Promise.all([ltPreview.stop(false),ltNpmUI.stopAutomatic(id)]).finally(()=>{if(expected===projectRevision){changingProject=false;scan();}});return;
+  }
+  if(!enabled||paused||changingProject)return;
+  if(project&&openedProject!==pathKey(project)){openedProject=pathKey(project);const first=project+'\\index.html';if(exists(first)&&!within(info(active()).path,project)){lt.objs.command.exec_BANG_(kw('open-path'),first);ltProofUI.connect()?.focus();}}
   const program=choose();
   if(!program){if(entry&&!busy){entry=null;root=null;observed=null;lastAttempt=null;expiresAt=0;ltPreview.stop(false);render();}return;}
   const value=signature(program);if(value!==observed){observed=value;schedule();}
  }
  function pause(message=''){
-  paused=true;reason=message;generation++;busy=false;clearTimeout(timer);timer=null;render();refreshMenu();pending=ltPreview.stop(false);return pending;
+  paused=true;reason=message;generation++;busy=false;clearTimeout(timer);timer=null;const id=automaticRun;automaticRun=null;render();refreshMenu();pending=Promise.all([ltPreview.stop(false),ltNpmUI.stopAutomatic(id)]);return pending;
  }
  function resume(){enabled=true;paused=false;reason='';expiresAt=0;observed=null;lastAttempt=null;refreshMenu();scan();render();}
- function run(){if(busy)return pending;const program=entry?{root,entry}:choose();if(!program)return Promise.resolve();clearTimeout(timer);enabled=true;paused=false;reason='';expiresAt=Date.now()+sessionMs;observed=null;lastAttempt=null;refreshMenu();return update(program,true);}
+ function run(){if(busy)return pending;webChecked=0;const program=choose()||(entry?{root,entry}:null);if(!program)return Promise.resolve();clearTimeout(timer);enabled=true;paused=false;reason='';expiresAt=Date.now()+sessionMs;observed=null;lastAttempt=null;refreshMenu();return update(program,true);}
+ async function ensure(){if(!enabled||paused||changingProject)return null;webChecked=0;const program=choose();if(!program)return null;if(busy)await pending;if(!ltPreview.isRunning()||pathKey(entry)!==pathKey(program.entry)){clearTimeout(timer);lastAttempt=null;await update(program);}return ltPreview.state();}
  function toggle(){if(!enabled){resume();return;}enabled=false;pause();entry=null;root=null;render();refreshMenu();}
  function manual(){paused=true;generation++;clearTimeout(timer);busy=false;entry=null;root=null;render();refreshMenu();}
  function stopped(message){if(!entry||paused)return;paused=true;reason=message||'Stopped. Click Run above to resume.';generation++;busy=false;clearTimeout(timer);render();refreshMenu();}
@@ -85,5 +113,5 @@ window.ltLive=(()=>{
    body.live-preview-split #proof-versions[data-status="idle"],body.live-preview-split #proof-output[data-status="idle"]{display:none}
   `;document.head.append(style);setInterval(scan,150);scan();render();
  }
- return {initialize,slot:()=>slot,changed,diskChanged,pause,resume,run,toggle,manual,stopped,enabled:()=>enabled,paused:()=>paused,state:()=>({enabled,paused,busy,entry,root,expiresAt,reason,generation,delayMs,sessionMs}),pending:()=>pending};
+ return {initialize,slot:()=>slot,changed,diskChanged,pause,resume,run,ensure,toggle,manual,stopped,enabled:()=>enabled,paused:()=>paused,state:()=>({enabled,paused,busy,entry,root,expiresAt,reason,generation,delayMs,sessionMs}),pending:()=>pending};
 })();

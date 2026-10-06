@@ -1,3 +1,15 @@
+Current follow-up: [HTML viewer repair — 2026-10-06](HTML-VIEWER-REPAIR-2026-10-06.md).
+
+Earlier reviewer repair: [Reviewer profile migration repair — 2026-10-06](REVIEWER-PROFILE-REPAIR-2026-10-06.md).
+
+Earlier preview repair: [Automatic Vite preview — 2026-10-06](AUTO-PREVIEW-2026-10-06.md).
+
+Earlier setup repair: [Chat setup repair and Vite/Tailwind support — 2026-10-06](CHAT-SETUP-REPAIR-2026-10-06.md).
+
+Earlier full regression: [Windows regression and Clef removal — 2026-10-06](RUN-TEST-2026-10-06.md).
+
+> Historical verification snapshots follow. The current app allows optional validation for eligible Untested reviewers. Clef support is temporarily removed; statements about its availability or mandatory qualification gates below describe earlier builds.
+
 # Installed reviewer qualification — 2026-10-06
 
 The installed model files are in `E:\OllamaData\models`, served by local Ollama **0.35.1**. The installed tags are `tev1:4b` (Q8_0, about 4.5 GB on disk) and `clef-flash:9b` (Q8_0, about 10 GB). No downloads, relocation, coding/reviewer selection changes or normal-profile qualification writes occurred. Light Table now recognizes Clef's installed vision projector even when `/api/show` omits `vision` from its decision capabilities. A regression check rejects descriptive model tags as proof of vision support.

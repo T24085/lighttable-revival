@@ -6,7 +6,7 @@ const memory=require('./proof-memory.cjs'),files=require('./revival-preview-file
 protocol.registerSchemesAsPrivileged([{scheme:'lt-preview',privileges:{standard:true,secure:true,supportFetchAPI:true,corsEnabled:true}}]);
 const active=new Map(),versions=new Map(),completed=new Map(),recent=[];
 const hotView=require('./revival-hot-view.cjs'),hotCode=require('./revival-hot-code.cjs');
-const csp="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-src 'none'; object-src 'none'; worker-src 'none'; base-uri 'self'; form-action 'none'";
+const network=require('./revival-preview-network.cjs'),csp=network.csp;
 function status(owner){const run=active.get(owner);return run?run.snapshot():null;}
 function stop(owner,reason='Preview stopped'){versions.set(owner,(versions.get(owner)||0)+1);return active.get(owner)?.finish(reason)||Promise.resolve(completed.get(owner)||null);}
 function validateLiveSources(prepared,previous){
@@ -199,7 +199,7 @@ async function start(owner,options,host,notify=()=>{},continuation={}){
   wc.on('render-process-gone',(_event,detail)=>finish('Preview process terminated ('+detail.reason+'); memory limit is '+memory.defaultLimitBytes/(1024*1024)+' MiB private commit').catch(()=>{}));
   wc.session.webRequest.onBeforeRequest((request,cb)=>{
    if(request.resourceType==='mainFrame'&&!bootstrap){cb({cancel:true});if(request.method==='GET')requestReload(request.url);return;}
-   const allowed=(request.url.startsWith(origin+'/')||serverMode&&request.url.startsWith(origin.replace(/^http:/,'ws:')+'/'))&&request.resourceType!=='subFrame';cb({cancel:!allowed});
+   cb({cancel:!network.allowed(request,origin,serverMode)});
   });
   if(serverMode)wc.session.webRequest.onHeadersReceived((details,callback)=>callback({responseHeaders:{...details.responseHeaders,'Content-Security-Policy':[csp.replace("connect-src 'self'","connect-src 'self' "+origin.replace(/^http:/,'ws:'))]}}));
   else wc.session.protocol.handle('lt-preview',request=>{
@@ -247,7 +247,7 @@ async function start(owner,options,host,notify=()=>{},continuation={}){
   // Keep the bootstrap document/process. Navigating to the source before attachment
   // would allow inline scripts to run before the Windows quota is verified.
   bootstrap=false;prepared.enable?.();clearTimeout(deadline);const lifetimeMs=options.liveEdit?options.liveBudgetMs:prepared.lifetimeMs||30000;deadline=setTimeout(()=>finish('Preview lifetime exceeded '+lifetimeMs+' ms').catch(()=>{}),lifetimeMs);
-  const loadingMs=serverMode?5000:1500;executionTimer=setTimeout(()=>finish('Preview page loading exceeded '+loadingMs+' ms').catch(()=>{}),loadingMs);
+  const loadingMs=network.hasAssets(prepared.html)?15000:serverMode?5000:1500;executionTimer=setTimeout(()=>finish('Preview page loading exceeded '+loadingMs+' ms').catch(()=>{}),loadingMs);
   if(prepared.bootstrap){const setup=prepared.bootstrap,installed=await wc.debugger.sendCommand('Runtime.evaluate',{expression:'import('+JSON.stringify(setup.url)+').then(()=>'+setup.key+'.configure('+JSON.stringify(setup.aliases)+','+JSON.stringify(setup.memoize)+'))',awaitPromise:true,returnByValue:true,timeout:1500});if(installed.exceptionDetails){const item=exception(installed.exceptionDetails),error=Error(item.message);error.location=item.location;throw error;}if(done)throw Error(run.reason);}
   const loaded=new Promise((resolve,reject)=>{loadResolve=resolve;loadReject=reject;});
   const writing=wc.debugger.sendCommand('Runtime.evaluate',{expression:'document.open();document.write('+JSON.stringify(prepared.html)+');document.close();',timeout:1500});

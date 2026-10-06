@@ -15,7 +15,7 @@ function environment(executable){
 }
 function discover(){
  if(runtime)return runtime;
- const candidates=[process.env.LT_NODE_EXECUTABLE,...(process.env.PATH||'').split(path.delimiter).filter(dir=>dir&&path.isAbsolute(dir)).map(dir=>path.join(dir,'node.exe')),path.join(process.env.ProgramFiles||'C:/Program Files','nodejs/node.exe')].filter(Boolean);
+ const candidates=[process.env.LT_NODE_EXECUTABLE,path.join(require('./revival-runtime-paths.cjs').toolchain(),'node/node.exe'),...(process.env.PATH||'').split(path.delimiter).filter(dir=>dir&&path.isAbsolute(dir)).map(dir=>path.join(dir,'node.exe')),path.join(process.env.ProgramFiles||'C:/Program Files','nodejs/node.exe')].filter(Boolean);
  for(const candidate of [...new Set(candidates)])try{
   const executable=path.resolve(candidate);if(!fs.statSync(executable).isFile())continue;
   const version=execFileSync(executable,['--version'],{windowsHide:true,timeout:3000,maxBuffer:4096,env:environment(executable)}).toString().trim();

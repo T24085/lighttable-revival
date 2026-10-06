@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),net=require('net'),crypto=require('crypto'),{spawn}=require('child_process'),readline=require('readline');
 const policy=require('./proof-policy.cjs'),memory=require('./proof-memory.cjs');
-function runtime(){const executable=process.env.LT_IPYTHON_EXECUTABLE||path.resolve(__dirname,'../../../toolchain/repl-python/Scripts/python.exe');if(!path.isAbsolute(executable)||!fs.existsSync(executable))throw Error('IPython client Python was not found. Run script/revival-repl-setup.ps1 or set LT_IPYTHON_EXECUTABLE.');return fs.realpathSync(executable);}
+function runtime(){const executable=process.env.LT_IPYTHON_EXECUTABLE||path.join(require('./revival-runtime-paths.cjs').toolchain(),'repl-python/Scripts/python.exe');if(!path.isAbsolute(executable)||!fs.existsSync(executable))throw Error('IPython client Python was not found. Run script/revival-repl-setup.ps1 or set LT_IPYTHON_EXECUTABLE.');return fs.realpathSync(executable);}
 function prepare(options){
  const file=policy.checked(options.connectionFile);if(fs.statSync(file).size>16384)throw Error('Kernel connection file exceeds 16 KiB');let data;try{data=JSON.parse(fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''));}catch(_){throw Error('Choose a valid Jupyter kernel connection JSON file');}
  const ports=['shell_port','iopub_port','stdin_port','control_port','hb_port'];

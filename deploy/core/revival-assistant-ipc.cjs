@@ -2,7 +2,7 @@
 const fs=require('fs'),path=require('path'),crypto=require('crypto');
 const policy=require('./proof-policy.cjs'),projects=require('./revival-projects.cjs');
 function install({ipcMain,BrowserWindow,app,dialog,proofSender,preview}){
- const store=require('./revival-assistant-store.cjs').create(path.join(policy.user,'assistant')),pending=new Map(),owners=new Map(),views=new Map(),servers=require('./revival-assistant-servers.cjs');let runtime,closing=false;
+ const store=require('./revival-assistant-store.cjs').create(require('./revival-assistant-profile.cjs').directory(path.join(policy.user,'assistant'))),pending=new Map(),owners=new Map(),views=new Map(),servers=require('./revival-assistant-servers.cjs');let runtime,closing=false;
  const notify=(owner,message)=>{const sender=owners.get(owner);if(sender&&!sender.isDestroyed())sender.send('assistant-event',message);};
  const commands=require('./revival-assistant-commands.cjs').create({notify:(owner,value)=>runtime?runtime.commandEvent(owner,value):notify(owner,value)});
  function editor(owner,op,args){const sender=owners.get(owner);if(!sender||sender.isDestroyed())return Promise.reject(Error('Editor window closed'));if(op==='open')policy.grantFile(args.path);if(op==='rename')policy.grantFile(args.newPath);return new Promise((resolve,reject)=>{const id=crypto.randomUUID(),timer=setTimeout(()=>{pending.delete(id);reject(Error('Editor action did not complete: '+op));},20000);pending.set(id,{owner,resolve,reject,timer});sender.send('assistant-editor-request',{id,op,args});});}
@@ -20,6 +20,7 @@ function install({ipcMain,BrowserWindow,app,dialog,proofSender,preview}){
   async capture(run){const record=await settled(run),view=preview.view(record?.owner??run.owner);if(!view)throw Error('Start a preview first');let captured;for(let attempt=0;attempt<6;attempt++){try{view.webContents.invalidate();captured=await view.webContents.capturePage();if(!captured.isEmpty())break;}catch(error){if(!/UnknownVizError|Current display surface not available/.test(error.message)||attempt===5)throw error;}await new Promise(resolve=>setTimeout(resolve,150));}if(!captured||captured.isEmpty())throw Error('Preview pixels are unavailable');const size=captured.getSize(),pixels=size.width>1024?captured.resize({width:1024}):captured;return {width:pixels.getSize().width,height:pixels.getSize().height,images:[pixels.toPNG().toString('base64')]};},
   async evidence(run,options){
    let record=await settled(run),target=record?.owner??run.owner,state=preview.status(target);const collector=require('./revival-reviewer-evidence.cjs'),deadline=Date.now()+10000;
+   if(state?.status!=='running'){const automatic=await editor(run.owner,'preview-ensure',{});if(automatic?.status==='running'&&automatic.project?.entry){await previewTools.start(run,{path:automatic.project.entry});record=await settled(run);target=record?.owner??run.owner;state=preview.status(target);}}
    while(state?.status==='running'&&!collector.sourceCurrent(state,(await editor(run.owner,'context',{})).buffers)&&Date.now()<deadline){await require('node:timers/promises').setTimeout(100,null,{signal:options.signal});record=await settled(run);target=record?.owner??run.owner;state=preview.status(target);}
    const view=preview.view(target);
    if(!view||state?.status!=='running')throw Error('Start a live preview before reviewing');

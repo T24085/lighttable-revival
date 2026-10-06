@@ -10,7 +10,8 @@ const types={'.html':'text/html','.htm':'text/html','.js':'text/javascript','.mj
 function inside(file,root){const rel=path.relative(root,file);return rel===''||(!path.isAbsolute(rel)&&rel!=='..'&&!rel.startsWith('..'+path.sep));}
 function prepare(options,origin){
  if(!options||typeof options!=='object'||Array.isArray(options)||typeof options.path!=='string')throw Error('Choose an HTML or JavaScript file in an opened project.');
- const entry=policy.checked(options.path),fixture=options[reviewerFixtureRoot];if(fixture!==undefined&&(typeof fixture!=='string'||!inside(fixture,path.join(policy.user,'assistant','reviewer-fixtures'))||!inside(entry,fixture)))throw Error('Invalid internal reviewer fixture root');
+ const entry=policy.checked(options.path),fixture=options[reviewerFixtureRoot];
+ if(fixture!==undefined){const fixtureBase=path.join(require('./revival-assistant-profile.cjs').directory(path.join(policy.user,'assistant')),'reviewer-fixtures');if(typeof fixture!=='string'||!inside(fixture,fixtureBase)||!inside(entry,fixture))throw Error('Invalid internal reviewer fixture root');}
  const root=fixture||projects.info().recents.map(p=>p.path).filter(p=>inside(entry,p)).sort((a,b)=>b.length-a.length)[0];
  if(!root)throw Error('Open the containing folder with File → Open project before previewing it.');
  if(!/\.(html?|[cm]?js|jsx|[cm]?ts|tsx)$/i.test(entry))throw Error('Preview an HTML, JavaScript, JSX, TypeScript or TSX file.');

@@ -32,7 +32,7 @@ ipcMain.on('proof-operation',(event,op,args)=>{
    }
    if(op==='fingerprints'){event.returnValue={value:proofPolicy.fingerprints(args[0])};return;}
    if(op==='window') {const w=BrowserWindow.fromWebContents(event.sender);const [action,params]=args;switch(action){case 'size':event.returnValue={value:w.getSize()};return;case 'position':event.returnValue={value:w.getPosition()};return;case 'fullscreen':event.returnValue={value:w.isFullScreen()};return;case 'focus':w.focus();break;case 'minimize':w.minimize();break;case 'maximize':w.maximize();break;case 'set-fullscreen':w.setFullScreen(!!params);break;case 'close':setImmediate(()=>w.close());break;case 'destroy':setImmediate(()=>w.destroy());break;default:throw Error('Window action unavailable');}event.returnValue={value:null};return;}
-   if(['dialog-open','dialog-save','menu','clipboard-read','clipboard-write','project-info','project-parent','project-create','project-open','project-reopen','project-file','node-info'].includes(op)){event.returnValue={value:require('./revival-desktop.cjs').operation(event,op,args)};return;}
+   if(['dialog-open','dialog-save','menu','clipboard-read','clipboard-write','project-info','project-preview','project-parent','project-create','project-open','project-reopen','project-file','node-info'].includes(op)){event.returnValue={value:require('./revival-desktop.cjs').operation(event,op,args)};return;}
    event.returnValue={value:proofPolicy.operation(op,args)};
  } catch(e){event.returnValue={error:e.message};}
 });

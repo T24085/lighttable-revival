@@ -13,9 +13,10 @@ foreach($artifact in $preflight.toolchain.artifacts){
  if((Get-FileHash -LiteralPath $artifact.path -Algorithm SHA256).Hash -ne $artifact.sha256){throw 'Official Leiningen artifact hash mismatch'}
 }
 $buildEnvironment=@{}
-foreach($name in 'LEIN_HOME','LEIN_JAR','LEIN_JAVA_CMD','electron_config_cache'){$buildEnvironment[$name]=[Environment]::GetEnvironmentVariable($name,'Process')}
+foreach($name in 'LEIN_HOME','LEIN_JAR','LEIN_JAVA_CMD','LT_TOOLCHAIN_ROOT','electron_config_cache'){$buildEnvironment[$name]=[Environment]::GetEnvironmentVariable($name,'Process')}
 try{
  $env:LEIN_HOME=Join-Path $ToolchainRoot 'lein-home';$env:LEIN_JAR=$jar
+ $env:LT_TOOLCHAIN_ROOT=$ToolchainRoot
  # Freeze the explicit/default JVM checked above; restore the caller's choice afterward.
  $env:LEIN_JAVA_CMD=$preflight.java.path
  New-Item -ItemType Directory -Force -Path $env:LEIN_HOME | Out-Null

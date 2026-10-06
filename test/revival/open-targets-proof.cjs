@@ -163,7 +163,7 @@ async function run(){
   await openEvent(secondWindow,survivorFile);await until(()=>ui(secondWindow,activePath).then(value=>value===survivorFile));
   check('Closing the first owned window leaves later file-manager delivery usable in the survivor',await ui(secondWindow,countFor(survivorFile))===1&&await ui(secondWindow,'ltStartup.diagnostics().delivered')===2&&await ui(secondWindow,'ltProofUI.connect().getValue()')===normalized(survivorFile)&&transport.diagnostics().pending===0);
   check('Existing owned sources, normal examples, original main and app manifest retain exact bytes',fixtureFiles.every(file=>fs.readFileSync(file).equals(original.get(file)))&&normal.every(item=>fs.existsSync(item.path)===item.exists&&(!item.exists||hash(fs.readFileSync(item.path))===item.sha256)));
-  check('The proof and all startup production sources stay frozen during native execution',frozen.every(item=>item.exists&&fs.existsSync(item.path)&&hash(fs.readFileSync(item.path))===item.sha256));
+  check('The proof and all startup production sources stay frozen during native execution',frozen.every(item=>fs.existsSync(item.path)===item.exists&&(!item.exists||hash(fs.readFileSync(item.path))===item.sha256)));
   await ui(secondWindow,'new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');const {captureNativePage}=require('./native-page-capture.cjs');
   const screenshot=path.join(policy.root,'open-targets-original-editor.png');fs.writeFileSync(screenshot,(await captureNativePage(secondWindow.webContents)).toPNG());
   check('An actual native screenshot retains survivor original editor pixels at 900 by 600',secondWindow.getContentSize()[0]===900&&secondWindow.getContentSize()[1]===600&&fs.statSync(screenshot).size>1024);

@@ -1,7 +1,7 @@
-param([string]$PythonExecutable)
+param([string]$PythonExecutable,[string]$ToolchainRoot)
 $ErrorActionPreference='Stop'
 $replSource=Split-Path -Parent $PSScriptRoot
-$replToolchain=Join-Path (Split-Path -Parent $replSource) 'toolchain'
+$replToolchain=if($ToolchainRoot){$ToolchainRoot}elseif($env:LT_TOOLCHAIN_ROOT){$env:LT_TOOLCHAIN_ROOT}else{Join-Path $replSource '.revival\toolchain'}
 $replEnvironment=Join-Path $replToolchain 'repl-python'
 if(!$PythonExecutable){$PythonExecutable=(Get-Command python.exe -ErrorAction Stop).Source}
 & $PythonExecutable -c 'import sys; assert sys.version_info >= (3,11), "Python 3.11 or newer is required"'

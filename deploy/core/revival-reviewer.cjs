@@ -1,6 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),os=require('os'),crypto=require('crypto');
 const {digest}=require('./revival-reviewer-evidence.cjs');
+const modelPolicy=require('./revival-model-policy.cjs');
 const protocolVersion=1,threshold=.85;
 const categoryCriteria={uncertain:'Insufficient evidence or ambiguous conditions.',clean:'No clear defect supported by the evidence.',overflow:'Unintended horizontal overflow.',clipping:'Visible text or a control is cut off.',missing_control:'A required control is absent or hidden.',runtime_error:'A program runtime error.',other:'Another clear defect.'};
 function criteria(goal){return {goal:String(goal||'Fix clear defects in the current program.').slice(0,1200),preserveDesign:! /\b(redesign|restyle)\b/i.test(goal||''),requireImages:/\b(screenshots?|image reviews?|visual appearance|visually verify)\b/i.test(goal||''),requireBehavior:/\b(behavior|behaviour|click|clicks|clicking|interaction|interactions|interact|submit|submission)\b/i.test(goal||''),version:1};}
@@ -20,16 +21,16 @@ function testEvidence(run,revision){
 function create({store,client,preview,editor,progress=()=>{}}){
  const receiptFile=path.join(store.directory,'reviewer-validation.json');
  function validations(){try{return JSON.parse(fs.readFileSync(receiptFile,'utf8'));}catch(e){if(e.code==='ENOENT')return {};throw e;}}
- function saveValidation(key,value){const all=validations();all[key]=value;const stage=receiptFile+'.tmp';fs.writeFileSync(stage,JSON.stringify(all,null,2));fs.renameSync(stage,receiptFile);}
+ function saveValidation(key,value){const all=validations();all[key]=value;require('./revival-atomic-json.cjs').write(receiptFile,all);}
  async function models({signal}={}){
   const list=await client.models(),result=[];
   // Ollama 0.35.1 can omit vision from capabilities for decision models even
   // when show returns their installed vision projector. Trust encoder metadata,
   // never a model name or a descriptive multimodal tag.
-  for(const m of list){signal?.throwIfAborted();try{const meta=await client.show(m.name,{signal});if(meta.capabilities?.includes('decision')&&!meta.remote_host&&!meta.remote_model){const image=meta.capabilities.includes('vision')||meta.projector_info?.['clip.has_vision_encoder']===true,key=digest([m.name,m.digest,image,protocolVersion]),validation=validations()[key];result.push({name:m.name,digest:m.digest,images:image,key,mode:image?'Text + images':'Text review',validation:validation?.passed?'Validated':'Untested',receipt:validation||null});}}catch(e){if(signal?.aborted)throw e;result.push({name:m.name,error:e.message,eligible:false});}}
+  for(const m of list){signal?.throwIfAborted();if(modelPolicy.clef(m.name))continue;try{const meta=await client.show(m.name,{signal});if(modelPolicy.clef(m.name,meta)){if(store.settings().reviewerModel===m.name)store.settings({reviewerModel:null});continue;}if(meta.capabilities?.includes('decision')&&!meta.remote_host&&!meta.remote_model){const image=meta.capabilities.includes('vision')||meta.projector_info?.['clip.has_vision_encoder']===true,key=digest([m.name,m.digest,image,protocolVersion]),validation=validations()[key];result.push({name:m.name,digest:m.digest,images:image,key,mode:image?'Text + images':'Text review',validation:validation?.passed?'Validated':'Untested',receipt:validation||null});}}catch(e){if(signal?.aborted)throw e;result.push({name:m.name,error:e.message,eligible:false});}}
   return result;
  }
- async function selected(name,{signal,automatic=false}={}){if(!name)throw Error('Choose a Reviewer model first');const model=(await models({signal})).find(m=>m.name===name&&!m.error);if(!model)throw Error('Selected reviewer is unavailable or does not advertise local decision support. Refresh models.');if(automatic&&model.validation!=='Validated')throw Error('Reviewer is Untested. Run Validate reviewer before automatic correction. Manual Review remains available.');return model;}
+ async function selected(name,{signal}={}){if(!name)throw Error('Choose a Reviewer model first');const model=(await models({signal})).find(m=>m.name===name&&!m.error);if(!model)throw Error('Selected reviewer is unavailable or does not advertise local decision support. Refresh models.');return model;}
  async function decide(run,model,evidence,locked,baseline){
   const results=[];
   try{for(let index=0;index<evidence.viewports.length;index++){

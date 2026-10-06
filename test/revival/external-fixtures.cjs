@@ -7,7 +7,7 @@ async function gate(executable,args,options,limitBytes){
  try{quota=await memory.attach(child.pid,[],executable,{limitBytes});child.stdin.write('start\n');const info=await ready;clearTimeout(timer);return {child,info,quota,stop,diagnostics:()=>({pid:child.pid,exitCode:child.exitCode,errors})};}catch(error){await stop();throw error;}
 }
 async function start(root){
- const toolchain=path.resolve(__dirname,'../../../toolchain'),java=require('../../deploy/core/revival-languages.cjs').info().clojure.executable,python=fs.realpathSync(path.join(toolchain,'repl-python/Scripts/python.exe'));
+ const toolchain=require('../../deploy/core/revival-runtime-paths.cjs').toolchain(),java=require('../../deploy/core/revival-languages.cjs').info().clojure.executable,python=fs.realpathSync(path.join(toolchain,'repl-python/Scripts/python.exe'));
  const jars=[['org/clojure/clojure','1.10.3','clojure'],['org/clojure/spec.alpha','0.2.194','spec.alpha'],['org/clojure/core.specs.alpha','0.2.56','core.specs.alpha'],['nrepl/nrepl','1.0.0','nrepl']].map(([dir,version,name])=>path.join(toolchain,'m2',dir,version,name+'-'+version+'.jar'));
  const clj=path.join(root,'fixture-server.clj'),py=path.join(root,'fixture-kernel.py'),connectionFile=path.join(root,'kernel.json');
  fs.writeFileSync(clj,'(require \'[nrepl.server :as server])\n(read-line)\n(let [s (server/start-server :bind "127.0.0.1" :port 0)] (println (str "{\\\"port\\\":" (:port s) "}")) (flush))\n(while true (Thread/sleep 1000))');

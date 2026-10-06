@@ -16,5 +16,5 @@ try{
  $realReceipt=Get-Content -LiteralPath $realResult -Raw | ConvertFrom-Json
  if($realProcess.ExitCode-ne 0 -or !$realReceipt.completed){throw 'Native reviewer runner failed; inspect reviewer-real-result.json'}
  $realReceipt.models | ForEach-Object {[pscustomobject]@{model=$_.name;passed=$_.receipt.passed;correct=$_.receipt.correct;durationMs=$_.durationMs;error=$_.error}} | ConvertTo-Json
- if(@($realReceipt.models | Where-Object {!$_.receipt.passed}).Count){throw 'One or more reviewers did not qualify; automatic correction must remain disabled'}
+ if(@($realReceipt.models | Where-Object {!$_.receipt.passed}).Count){throw 'One or more reviewers failed the optional diagnostic fixtures; inspect the receipt before relying on their judgments'}
 }finally{if(!$realProcess.HasExited){Stop-Process -Id $realProcess.Id}}

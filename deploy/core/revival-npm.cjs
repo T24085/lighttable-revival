@@ -22,7 +22,7 @@ function prepare(options){
  if(options.kind==='server'&&(typeof options.script!=='string'||!node.scripts(root).includes(options.script)))throw Error('Choose a script defined in this project package.json.');
  const maximum=options.kind==='install'?limits.installMs:limits.serverMs,budgetMs=options.budgetMs===undefined?maximum:options.budgetMs;
  if(!Number.isInteger(budgetMs)||budgetMs<100||budgetMs>maximum)throw Error('Invalid npm execution budget.');
- const inputs=node.initialInputs(root);return {entry,root,source,runtime,kind:options.kind,script:options.script,budgetMs,inputs,runId:typeof options.runId==='string'?options.runId.slice(0,128):crypto.randomUUID()};
+ const inputs=node.initialInputs(root);return {entry,root,source,runtime,kind:options.kind,script:options.script,budgetMs,inputs,automatic:options.automatic===true,runId:typeof options.runId==='string'?options.runId.slice(0,128):crypto.randomUUID()};
 }
 function status(owner){return active.get(owner)?.snapshot()||null;}
 function stop(owner,reason='Stopped by user'){versions.set(owner,(versions.get(owner)||0)+1);const previous=[...completed].reverse().find(([key])=>key.startsWith(owner+'|'))?.[1]||null;return active.get(owner)?.finish('stopped',reason)||Promise.resolve(previous);}
@@ -44,7 +44,7 @@ async function start(owner,options,notify=()=>{}){
   }catch(error){socket?.destroy();failure=error;}}
   throw failure;
  }
- function snapshot(){return {id,runId:prepared.runId,kind:prepared.kind,script:prepared.kind==='server'?prepared.script:null,status:state,reason,exitCode,pid:child?.pid||null,root:prepared.root,command:prepared.kind==='install'?'npm install':'npm run '+prepared.script,startedAt,expiresAt,budgetMs:prepared.budgetMs,output:{stdout,stderr,bytes:outputBytes},source:prepared.source,sha256:hash(prepared.source),project:{root:prepared.root,entry:prepared.entry,snapshotKind:'inputs',files:prepared.inputs,sha256:hash(JSON.stringify(prepared.inputs.map(({name,sha256})=>({name,sha256}))))},memory:quota?{...quota.metadata,...accounting}:null};}
+ function snapshot(){return {id,runId:prepared.runId,automatic:prepared.automatic,kind:prepared.kind,script:prepared.kind==='server'?prepared.script:null,status:state,reason,exitCode,pid:child?.pid||null,root:prepared.root,command:prepared.kind==='install'?'npm install':'npm run '+prepared.script,startedAt,expiresAt,budgetMs:prepared.budgetMs,output:{stdout,stderr,bytes:outputBytes},source:prepared.source,sha256:hash(prepared.source),project:{root:prepared.root,entry:prepared.entry,snapshotKind:'inputs',files:prepared.inputs,sha256:hash(JSON.stringify(prepared.inputs.map(({name,sha256})=>({name,sha256}))))},memory:quota?{...quota.metadata,...accounting}:null};}
  function emit(event){try{const value=snapshot();if(event==='output')delete value.project;else value.project.files=value.project.files.map(({source,...item})=>item);delete value.source;notify({...value,event});}catch(_){} }
  function finish(nextStatus,message,code=null){
   if(done)return cleanup;done=true;clearTimeout(timer);clearTimeout(outputTimer);state=nextStatus;reason=message;exitCode=code;for(const listener of stopListeners){try{listener(message);}catch(_){}}stopListeners.clear();
