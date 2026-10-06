@@ -8,7 +8,7 @@ const wait=async predicate=>{const end=Date.now()+5000;while(!predicate()){if(Da
 const call=(name,args={})=>({function:{name,arguments:args}}),response=(content='',tool_calls)=>({message:{role:'assistant',content,...(tool_calls?{tool_calls}:{})},receipt:{outputTokens:2}});
 async function main(){
  const store=require(core+'/revival-assistant-store.cjs').create(path.join(root,'history'));
- await check('First use has no selected model, 64K context and a resizable Chat dock',()=>assert.deepEqual(store.settings(),{version:1,model:null,contextTokens:65536,thinking:false,dockWidth:340,dockTab:'chat'}));
+ await check('First use has no selected model, 64K context and a resizable Chat dock',()=>assert.deepEqual(store.settings(),{version:1,model:null,reviewerModel:null,contextTokens:65536,thinking:false,dockWidth:340,dockTab:'chat'}));
  await check('Settings validate context and reject unknown fields',()=>{assert.throws(()=>store.settings({contextTokens:1}));assert.throws(()=>store.settings({version:8}));store.settings({model:'fixture',contextTokens:8192});assert.equal(store.settings().model,'fixture');});
  const session=store.conversation(root);session.status='running';store.save(session);
  await check('Restart recovers interrupted work as paused without replay',()=>{const restored=require(core+'/revival-assistant-store.cjs').create(store.directory).load(session.id);assert.equal(restored.status,'paused');assert.match(restored.checkpoint.reason,/restarted/);assert.equal(restored.journal.length,0);});

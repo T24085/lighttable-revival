@@ -1,9 +1,12 @@
 'use strict';
 const {captureNativePage}=require('./native-page-capture.cjs');
 process.env.LT_REVIVAL_TEST='1';
+process.env.LT_REVIVAL_AUTO_LIVE='0';
 const {app}=require('electron'),fs=require('fs'),path=require('path');
 const runtime=path.resolve(__dirname,'../..','.revival');
-const project=JSON.parse(fs.readFileSync(path.join(runtime,'evaluation-result.json'),'utf8')).projects.project;
+const isolation=require('./isolated-editor-profile.cjs').create();
+const project=path.join(runtime,'module-editor',require('crypto').randomUUID());fs.mkdirSync(project,{recursive:true});
+require('../../deploy/core/revival-projects.cjs').activate(project);
 const fixtures={'sum.js':'export const sum = (a,b)=>a+b;','data.json':'{"price":22}','common.cjs':'module.exports={answer:43};','barrel.js':'export {default as answer} from "./number.js";','number.js':'export default 43;','cycle-a.cjs':'exports.name="a";exports.other=require("./cycle-b.cjs").name;','cycle-b.cjs':'exports.name="b";require("./cycle-a.cjs");','bad.js':'export const bad = ;','loop.js':'while(true){}','module-entry.js':''};
 for(const [name,source] of Object.entries(fixtures))fs.writeFileSync(path.join(project,name),source);
 fs.writeFileSync(path.join(project,'awaited.mjs'),'export const answer = await new Promise(resolve=>setTimeout(()=>resolve(43),100));');
@@ -31,6 +34,7 @@ app.on('browser-window-created',(_event,window)=>{
   dialog.showOpenDialogSync=originalPicker;
   await require('../../deploy/core/proof-js.cjs').shutdown();
   result.cleanup=require('../../deploy/core/proof-js.cjs').diagnostics();delete result.cleanup.recent;
+  result.restoration=isolation.restore();
   result.passed=result.passed&&result.cleanup.jobs===0&&result.cleanup.pending===0&&!result.cleanup.helperPid;
   fs.writeFileSync(path.join(runtime,'module-result.json'),JSON.stringify(result,null,2));app.exit(result.passed?0:1);
  },2200));

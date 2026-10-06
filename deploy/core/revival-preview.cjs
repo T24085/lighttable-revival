@@ -51,7 +51,7 @@ async function start(owner,options,host,notify=()=>{},continuation={}){
  const bootstrapResponse=serverMode?null:new Response('<!doctype html><meta charset="utf-8"><title>Preparing preview</title><style>body{margin:0;padding:24px;background:#17201c;color:#d9ede2;font:14px system-ui}</style><body>Preparing live program…</body>',{headers:{'Content-Type':'text/html','Content-Security-Policy':csp,'Cache-Control':'no-store'}});
  if(versions.get(owner)!==revision){await prepared.close?.();throw Error('Preview replaced before startup.');}
  let view;try{view=new WebContentsView({webPreferences:{partition:'preview-'+id,sandbox:true,contextIsolation:true,nodeIntegration:false,nodeIntegrationInWorker:false,webSecurity:true,backgroundThrottling:!!(options.liveEdit||options.bounds)}});}catch(error){await prepared.close?.();throw error;}const wc=view.webContents;
- let done=false,ready=false,bootstrap=true,reloadQueued=false,pid=0,attachment,cleanup,deadline,executionTimer,quota,accounting,loadResolve,loadReject,pending=false,result=null,logs=[],errors=[],logBytes=0,watchValues=[],watchBytes=0;
+ let done=false,ready=false,bootstrap=true,bootstrapPainted=false,reloadQueued=false,pid=0,attachment,cleanup,deadline,executionTimer,quota,accounting,loadResolve,loadReject,pending=false,result=null,logs=[],errors=[],logBytes=0,watchValues=[],watchBytes=0;
  const watch=prepared.watch,binding='__lt_capture_'+crypto.randomBytes(16).toString('hex');
  const hotKey='__lt_hot_'+id,styleSheets=new Map();let hotController=options.liveEdit?hotView.create(prepared,hotKey):null,updateCount=0,hotHistoryBytes=0,liveUpdate={kind:'restart',reason:restartReason};
  const selections=new Map(),selectionBuffers=new Map(),watchTimers=new Set();let selectionBytes=0,watchUpdates=Promise.resolve(),selectionController,selectionCompilation;const run={view,finish,snapshot,live:!!options.liveEdit,update:updateLive,bounds:continuation.bounds||options.bounds,evaluate:evaluateSource,updateWatches:files=>{
@@ -60,7 +60,7 @@ async function start(owner,options,host,notify=()=>{},continuation={}){
  }};active.set(owner,run);
  prepared.onWatches?.(()=>{if(!done)emit('watch-sources');});
  prepared.onFailure?.(message=>{if(done)return;if(message.startsWith('Development server stopped:')){finish(message).catch(()=>{});return;}if(errors.length<32){errors.push({message,location:null});emit('error');}});
- function snapshot(details=true){const project=prepared.snapshot();if(!details)project.files=project.files.map(({source,...item})=>item);return {id,requestId,liveUpdate,reloadFrom:continuation.reloadFrom||null,reloadCount:continuation.reloadCount||0,status:done?'stopped':ready?'running':'loading',reason:run.reason||null,url:prepared.url,rendererPid:pid,project,logs:[...logs],errors:[...errors],result,watches:watchValues,watchSnapshot:watch?{sha256:watch.sha256,specs:watch.specs,revision:watch.revision||0,...(prepared.watchBindings?{bindings:prepared.watchBindings()}:{})}:null,memory:quota?{...quota.metadata,...accounting}:null};}
+ function snapshot(details=true){const project=prepared.snapshot();if(!details)project.files=project.files.map(({source,...item})=>item);return {id,requestId,liveUpdate,bootstrapPainted,reloadFrom:continuation.reloadFrom||null,reloadCount:continuation.reloadCount||0,status:done?'stopped':ready?'running':'loading',reason:run.reason||null,url:prepared.url,rendererPid:pid,project,logs:[...logs],errors:[...errors],result,watches:watchValues,watchSnapshot:watch?{sha256:watch.sha256,specs:watch.specs,revision:watch.revision||0,...(prepared.watchBindings?{bindings:prepared.watchBindings()}:{})}:null,memory:quota?{...quota.metadata,...accounting}:null};}
  function emit(kind){try{notify({kind,...snapshot(false)});}catch(_){} }
  async function updateLive(candidate,nextOptions,current){
   const fallback=reason=>{run.restartReason=reason;return null;};
@@ -186,9 +186,10 @@ async function start(owner,options,host,notify=()=>{},continuation={}){
  }
  try{
   if(!livePrepared)await prepared.compile?.();if(done)throw Error(run.reason);
-  // Attach the bootstrap before loading so painting has a native surface.
-  // Authored code remains gated on the verified renderer quota below.
-  if(options.liveEdit||options.bounds){host.contentView.addChildView(view);if(run.bounds)bounds(owner,run.bounds);else{view.setBounds({x:0,y:0,width:1,height:1});view.setVisible(true);}}
+  // All previews need a painted native surface before their authored deadline.
+  // Warm the inert document even for ordinary previews and expression watches;
+  // authored code remains gated on the verified renderer quota below.
+  host.contentView.addChildView(view);if(run.bounds)bounds(owner,run.bounds);else{view.setBounds({x:0,y:0,width:1,height:1});view.setVisible(true);}
   await memory.start();if(done)throw Error(run.reason);
   deadline=setTimeout(()=>finish('Preview startup exceeded 5000 ms').catch(()=>{}),5000);
   wc.session.setPermissionRequestHandler((_wc,_permission,cb)=>cb(false));wc.session.setPermissionCheckHandler(()=>false);
@@ -215,12 +216,13 @@ async function start(owner,options,host,notify=()=>{},continuation={}){
   clearTimeout(deadline);deadline=setTimeout(()=>finish('Preview inert initialization exceeded 5000 ms').catch(()=>{}),5000);
   // Schedule the inert document before asking for its first compositor frame.
   // Authored code still waits for the verified quota below.
-  if(options.liveEdit||options.bounds){
+  {
    wc.setBackgroundThrottling(false);
    wc.invalidate();let bootstrapFrame;
    for(let attempt=0;attempt<45;attempt++){try{bootstrapFrame=await wc.capturePage({x:0,y:0,width:1,height:1});if(!bootstrapFrame.isEmpty())break;}catch(error){if(!['Current display surface not available for capture','UnknownVizError'].some(message=>error.message.includes(message)))throw error;}await new Promise(resolve=>setTimeout(resolve,100));if(done)throw Error(run.reason);wc.invalidate();}
    if(!bootstrapFrame||bootstrapFrame.isEmpty())throw Error('Preview bootstrap did not paint');
    if(done)throw Error(run.reason);
+   bootstrapPainted=true;
   }
   wc.debugger.attach('1.3');wc.debugger.on('message',(_event,method,params)=>{
    if(done||reloadQueued)return;
@@ -251,7 +253,7 @@ async function start(owner,options,host,notify=()=>{},continuation={}){
   const writing=wc.debugger.sendCommand('Runtime.evaluate',{expression:'document.open();document.write('+JSON.stringify(prepared.html)+');document.close();',timeout:1500});
   await Promise.all([loaded,writing]);loadResolve=null;loadReject=null;clearTimeout(executionTimer);
   if(watch&&!done)await flushWatches();if(done)throw Error(run.reason);if(wc.getOSProcessId()!==pid)throw Error('Preview renderer changed after quota attachment.');
-  ready=true;if(!options.liveEdit&&!options.bounds)host.contentView.addChildView(view);if(run.bounds)bounds(owner,run.bounds);emit('ready');return snapshot();
+  ready=true;if(run.bounds)bounds(owner,run.bounds);emit('ready');return snapshot();
  }catch(error){await finish(error.message);throw error;}
 }
 function bounds(owner,value){const run=active.get(owner);if(!run||!value||typeof value!=='object')return;

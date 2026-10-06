@@ -20,6 +20,16 @@ function create({baseURL='http://127.0.0.1:11434',fetchImpl=localRequest}={}){
   pending+=decoder.decode();if(pending.trim())parse(pending);if(!complete)throw Error('Ollama response interrupted before completion; no pending actions executed');if(receipt.doneReason==='length')throw Error('Ollama response reached its generation limit; no pending actions executed');
   if(!message.thinking)delete message.thinking;if(!message.tool_calls.length)delete message.tool_calls;return {message,receipt};
  }
- return {models,show,chat};
+ async function unload(model,{signal}={}){if(!model)return;return (await request('generate',{model,keep_alive:0,stream:false},signal?AbortSignal.any([signal,AbortSignal.timeout(30000)]):AbortSignal.timeout(30000))).json();}
+ async function decision(body,{signal}={}){
+  const {validateRequest,validateResponse}=require('./revival-reviewer-protocol.cjs');validateRequest(body);
+  const deadline=AbortSignal.timeout(300000),combined=signal?AbortSignal.any([signal,deadline]):deadline;
+  try{
+   const response=await fetchImpl(new URL('v1/systemone',endpoint),{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({keep_alive:0,...body}),signal:combined});
+   if(!response.ok)throw Error('Reviewer Ollama '+response.status+': '+(await response.text()).slice(0,2048));
+   const result=await response.json();validateResponse(body,result);return result;
+  }catch(error){if(signal?.aborted)throw signal.reason||error;if(deadline.aborted)throw Error('Reviewer exceeded the five-minute request deadline. Loading and inference must complete within this limit.');throw error;}
+ }
+ return {models,show,chat,decision,unload,processes:async()=> (await(await request('ps',null,AbortSignal.timeout(5000))).json()).models||[]};
 }
 module.exports={create};

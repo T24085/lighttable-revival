@@ -1,6 +1,8 @@
 'use strict';
 const fs=require('fs'),path=require('path'),crypto=require('crypto');
 const policy=require('./proof-policy.cjs'),projects=require('./revival-projects.cjs'),watches=require('./proof-watches.cjs'),syntax=require('./revival-syntax.cjs');
+// Main-process-only fixture entry. Symbols cannot arrive over renderer IPC.
+const reviewerFixtureRoot=Symbol('reviewer-fixture-root');
 const javascriptFile=file=>/\.(?:[cm]?js|jsx|[cm]?ts|tsx)$/i.test(file);
 const limits=Object.freeze({files:256,fileBytes:2*1024*1024,totalBytes:8*1024*1024});
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
@@ -8,7 +10,8 @@ const types={'.html':'text/html','.htm':'text/html','.js':'text/javascript','.mj
 function inside(file,root){const rel=path.relative(root,file);return rel===''||(!path.isAbsolute(rel)&&rel!=='..'&&!rel.startsWith('..'+path.sep));}
 function prepare(options,origin){
  if(!options||typeof options!=='object'||Array.isArray(options)||typeof options.path!=='string')throw Error('Choose an HTML or JavaScript file in an opened project.');
- const entry=policy.checked(options.path),root=projects.info().recents.map(p=>p.path).filter(p=>inside(entry,p)).sort((a,b)=>b.length-a.length)[0];
+ const entry=policy.checked(options.path),fixture=options[reviewerFixtureRoot];if(fixture!==undefined&&(typeof fixture!=='string'||!inside(fixture,path.join(policy.user,'assistant','reviewer-fixtures'))||!inside(entry,fixture)))throw Error('Invalid internal reviewer fixture root');
+ const root=fixture||projects.info().recents.map(p=>p.path).filter(p=>inside(entry,p)).sort((a,b)=>b.length-a.length)[0];
  if(!root)throw Error('Open the containing folder with File → Open project before previewing it.');
  if(!/\.(html?|[cm]?js|jsx|[cm]?ts|tsx)$/i.test(entry))throw Error('Preview an HTML, JavaScript, JSX, TypeScript or TSX file.');
  const buffers=new Map(),sources=new Map(),loaders=new Map(),sourceSizes=new Map();let bufferBytes=0,bytes=0;
@@ -78,4 +81,4 @@ function prepare(options,origin){
  const compiler=require('./revival-preview-packages.cjs').create({root,entry,origin,read,checked,url,fromURL,loaderFor,typeFor,onDiscovery:(file,source)=>chargeSource(checked(file),Buffer.byteLength(source)),instrument:file=>[...inlineSources.values()].find(item=>item.path===file)?.instrument||watches.forFile(watch,file)||{source:read(file).source,edits:[]},watch,buffers:[...buffers].map(([file,value])=>({path:file,source:value.toString('utf8')})),responseSource:file=>response(file).toString('utf8')});
  return {entry,root,get html(){return html;},get bootstrap(){return compilation?.bootstrap;},url:url(entry),urlFor:url,typeFor:file=>compiler.resource(file)?.type||read(file).type,read:file=>compiler.virtual(file)?compiler.resource(file)||read(file):read(file),response:file=>compiler.resource(file)?.value||response(file),fromURL,mapLocation,snapshot,watch,limits,compile:async()=>{compilation=await compiler.compile(html);html=compilation.html;},close:compiler.close};
 }
-module.exports={prepare,limits};
+module.exports={prepare,limits,reviewerFixtureRoot};

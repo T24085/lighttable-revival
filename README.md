@@ -6,6 +6,7 @@ The current implementation includes project opening and creation, original editi
 
 - [Build and try the editor](docs/revival/TESTING.md)
 - [Assistant usage and Full Access limits](docs/revival/ASSISTANT.md)
+- [Selectable preview reviewers and bounded correction](docs/revival/REVIEWERS.md)
 - [Current experimental changelog](docs/revival/CHANGELOG.md)
 - [Known limits](docs/revival/KNOWN-LIMITS.md)
 - [Original feature comparison](docs/revival/LEGACY-PARITY.md)

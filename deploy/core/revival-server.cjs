@@ -39,11 +39,12 @@ async function create(owner,options={}){
   if(!target)throw lastFailure;
   function fileFor(resource){try{const pathname=decodeURIComponent(new URL(resource,origin).pathname);if(/[\\:\x00]/.test(pathname))return null;const file=path.resolve(root,'.'+(pathname==='/'?'/index.html':pathname));if(!inside(file,root))return null;return fs.statSync(policy.checked(file)).isFile()?file:null;}catch(_){return null;}}
   function sourceFile(address){try{if(address.startsWith('file:')){const file=policy.checked(require('url').fileURLToPath(address));return inside(file,root)?file:null;}const url=new URL(address,origin);return [origin,target.origin].includes(url.origin)&&!url.username&&!url.password?fileFor(origin+url.pathname+url.search):null;}catch(_){return null;}}
-  function record(resource,value,type){
+  function sourceHash(resource){try{const file=fileFor(resource);if(!file||fs.statSync(file).size>limits.originalBytes)return null;return hash(fs.readFileSync(file));}catch(_){return null;}}
+  function record(resource,value,type,requestedHash=sourceHash(resource)){
    if(value.length>limits.resourceBytes)throw Error('Server resource exceeds 8 MiB');const key=new URL(resource,origin).pathname+new URL(resource,origin).search,old=captures.get(key);
    captureBytes-=old?.byteLength||0;captures.delete(key);
    while(captures.size>=limits.files||captureBytes+value.length>limits.captureBytes){const first=captures.keys().next().value;if(first===undefined)throw Error('Server snapshots exceed 32 MiB');captureBytes-=captures.get(first).byteLength;captures.delete(first);}
-   const text=/^(text\/|application\/(?:json|javascript)|image\/svg)/i.test(type),file=fileFor(resource),item={path:file,name:key,exists:true,origin:'http',source:text?value.toString('utf8'):null,sha256:hash(value),byteLength:value.length,type};captures.set(key,item);captureBytes+=value.length;
+   const text=/^(text\/|application\/(?:json|javascript)|image\/svg)/i.test(type),file=fileFor(resource),item={path:file,name:key,exists:true,origin:'http',source:text?value.toString('utf8'):null,sha256:hash(value),sourceSha256:requestedHash===sourceHash(resource)?requestedHash:null,byteLength:value.length,type};captures.set(key,item);captureBytes+=value.length;
    return item;
   }
   function retainOriginal(file,address,source){
@@ -126,7 +127,7 @@ async function create(owner,options={}){
     if(closed)throw Error('Development server preview stopped.');if(incoming.headers.host!==new URL(origin).host||!incoming.url.startsWith('/')||incoming.url.startsWith('//')||incoming.url.length>8192)throw Error('Invalid server preview request.');
     if(!enabled){if(incoming.url!==entryURL||incoming.method!=='GET'){outgoing.writeHead(403);outgoing.end();return;}outgoing.setHeader('content-type','text/html');outgoing.end('<!doctype html><meta charset="utf-8"><title>Preparing development preview</title><style>body{margin:0;padding:24px;background:#17201c;color:#d9ede2;font:14px system-ui}</style><body>Preparing development preview.</body>');return;}
     counted=true;if(++pending>limits.concurrent)throw Error('Server preview exceeds 32 concurrent requests');
-    const url=new URL(incoming.url,target.origin),result=upstream=await request(url.href,{method:incoming.method,inputHeaders:incoming.headers,input:['GET','HEAD'].includes(incoming.method)?null:incoming}),response=result.response,type=String(response.headers['content-type']||'application/octet-stream'),outputHeaders={...response.headers};
+    const requestedHash=sourceHash(incoming.url),url=new URL(incoming.url,target.origin),result=upstream=await request(url.href,{method:incoming.method,inputHeaders:incoming.headers,input:['GET','HEAD'].includes(incoming.method)?null:incoming}),response=result.response,type=String(response.headers['content-type']||'application/octet-stream'),outputHeaders={...response.headers};
     delete outputHeaders['content-length'];delete outputHeaders['content-encoding'];delete outputHeaders['transfer-encoding'];delete outputHeaders.connection;delete outputHeaders['content-security-policy'];
     if(outputHeaders.location){const location=new URL(outputHeaders.location,target.origin);if(location.origin===target.origin)outputHeaders.location=origin+location.pathname+location.search+location.hash;}
     if(/^text\/event-stream/i.test(type)){
@@ -134,7 +135,7 @@ async function create(owner,options={}){
     }
     const value=await body(result);let delivered=value;
     if(incoming.method!=='HEAD'&&![204,304].includes(response.statusCode)){
-     const item=record(incoming.url,value,type);
+     const item=record(incoming.url,value,type,requestedHash);
      if(response.statusCode===200&&/^(?:text|application)\/(?:javascript|ecmascript)\b/i.test(type))await loadMap(item,response.headers);
      if(response.statusCode===200&&(/^text\/html\b/i.test(type)||/^(?:text|application)\/(?:javascript|ecmascript)\b/i.test(type)&&watcher.watch.specs.length)){
       const isHTML=/^text\/html\b/i.test(type),map=maps.get(item),transformed=isHTML?null:watcher.transform(item.source,map,item.path,sourceFile,item.sourceMap?.status==='unavailable'?item.sourceMap.reason:null,(address,index)=>originalFor(map,address,index));let code=isHTML?htmlResponse(item):transformed.source;

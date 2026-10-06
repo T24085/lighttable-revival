@@ -19,6 +19,7 @@ const definitions=[
  definition('start_preview','Show a captured HTML/JS file or a running assistant background server beside the code. For a server supply its job_id and printed loopback URL.',{path:string,job_id:string,url:string}),
  definition('inspect_preview','Read the running preview URL, DOM text, console and errors.'),
  definition('capture_preview','Capture actual preview pixels for a vision-capable model.'),
+ definition('check_preview','Run an explicit browser behavior assertion at desktop or mobile size. The JavaScript must return {passed:boolean,details:string}. Record real interactions and restore changed local program state when appropriate.',{source:string,label:string,viewport:{type:'string',enum:['desktop','mobile']}},['source','label','viewport']),
  definition('ask_user','Pause when information is required. Ask a concise question in the chat.',{question:string},['question'])
 ];
 function validate(call){const name=call?.function?.name,definition=definitions.find(item=>item.function.name===name);if(!definition)throw Error('Unknown assistant tool: '+name);const args=call.function.arguments;if(!args||typeof args!=='object'||Array.isArray(args))throw Error('Invalid tool arguments');const schema=definition.function.parameters;for(const required of schema.required)if(args[required]===undefined)throw Error('Missing '+required);for(const [key,value]of Object.entries(args)){const type=schema.properties[key];if(!type||typeof value!==(type.type==='integer'?'number':type.type)||type.type==='integer'&&!Number.isInteger(value)||type.enum&&!type.enum.includes(value))throw Error('Invalid '+key);}return {name,args};}
@@ -50,6 +51,7 @@ function create({files,commands,editor,preview,createProject,notify}){
    case 'start_preview':return preview.start(run,{...args,path:args.path?resolve(args.path):undefined});
    case 'inspect_preview':return preview.inspect(run);
    case 'capture_preview':return preview.capture(run);
+   case 'check_preview':{const receipt=await preview.check(run,args);session.behaviorChecks=(session.behaviorChecks||[]).slice(-19);session.behaviorChecks.push(receipt);return receipt;}
    case 'ask_user':run.pauseReason=args.question;notify({type:'question',text:args.question});return {waiting:true,question:args.question};
    default:throw Error('Unsupported tool');
   }
