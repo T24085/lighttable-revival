@@ -8,6 +8,9 @@ $assistantNode=if($env:LT_NODE_EXECUTABLE){$env:LT_NODE_EXECUTABLE}elseif(Test-P
 $assistantUnit=& $assistantNode (Join-Path $assistantSource 'test\revival\assistant.cjs')
 if($LASTEXITCODE-ne 0){throw 'Assistant controller checks failed'}
 $assistantUnit | Set-Content -LiteralPath (Join-Path $assistantEvidence 'assistant-unit-result.json') -Encoding utf8
+$verificationUnit=& $assistantNode (Join-Path $assistantSource 'test\revival\assistant-verification.cjs')
+if($LASTEXITCODE-ne 0){throw 'Assistant source verification and coding recovery checks failed'}
+$verificationUnit | Set-Content -LiteralPath (Join-Path $assistantEvidence 'assistant-verification-unit-result.json') -Encoding utf8
 function Invoke-AssistantProof([string]$Entry,[string]$Receipt,[int]$Timeout){
     $receiptPath=Join-Path $assistantEvidence $Receipt
     if(Test-Path -LiteralPath $receiptPath){Remove-Item -LiteralPath $receiptPath}

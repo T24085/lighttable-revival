@@ -43,13 +43,14 @@ function load(){
  return info();
 }
 function save(){require('./revival-atomic-json.cjs').write(statePath,{current,recents});}
-function activate(input){const p=policy.grantDirectory(input);current=p;recents=[p,...recents.filter(r=>r.toLowerCase()!==p.toLowerCase())].slice(0,20);warning=null;try{save();}catch(error){warning='Project opened, but recent projects could not be saved: '+error.message;}const entry=['index.js','src/App.tsx'].map(name=>path.join(p,name)).find(file=>fs.existsSync(file)&&fs.statSync(file).isFile());return {...identity(p),...info(),entry:entry||null};}
+function activate(input,preferredEntry){const p=policy.grantDirectory(input);current=p;recents=[p,...recents.filter(r=>r.toLowerCase()!==p.toLowerCase())].slice(0,20);warning=null;try{save();}catch(error){warning='Project opened, but recent projects could not be saved: '+error.message;}const entry=[preferredEntry,'index.html','index.js','main.py','src/App.tsx'].filter(Boolean).map(name=>path.join(p,name)).find(file=>fs.existsSync(file)&&fs.statSync(file).isFile());const only=entry?[]:fs.readdirSync(p,{withFileTypes:true}).filter(f=>f.isFile()&&!f.name.startsWith('.'));return {...identity(p),...info(),entry:entry||(only.length===1?path.join(p,only[0].name):null)};}
 function chooseParent(input){const p=policy.directory(input),token=crypto.randomBytes(24).toString('hex');parents.clear();parents.set(token,p);return {path:p,token};}
 const starter='// Run this file with Ctrl+Shift+Enter.\nconst total = require("./totals.cjs");\nconst prices = [12, 30];\nconsole.log("Project is running");\n({ total: total(prices), itemCount: prices.length });\n';
 const totals='module.exports = function total(values) {\n  return values.reduce((sum, price) => sum + price, 0);\n};\n';
 const starterTests='const test = require("node:test");\nconst assert = require("node:assert/strict");\nconst total = require("./totals.cjs");\n\ntest("adds the project prices", () => assert.equal(total([12, 30]), 42));\ntest("an empty list totals zero", () => assert.equal(total([]), 0));\ntest("handles discounts without changing the input", () => {\n  const prices = Object.freeze([30, -5, 12]);\n  assert.equal(total(prices), 37);\n});\n';
 function create(token,name,options={}){
- const template=options.template||'javascript';if(!['javascript','empty','vite-react-tailwind'].includes(template))throw Error('Unknown project template');
+ const template=options.template||(options.empty===true?'empty':'file');if(!['file','javascript','empty','vite-react-tailwind'].includes(template))throw Error('Unknown project template');
+ const fileName=template==='file'?validName(options.fileName??'index.html'):null;
  const parent=parents.get(token);if(!parent)throw Error('Choose the project location first.');
  validName(name);policy.directory(parent);const target=path.join(parent,name);
  if(fs.existsSync(target))throw Error('A folder with that name already exists. Open it as a project or choose another name.');
@@ -57,13 +58,14 @@ function create(token,name,options={}){
  try{
   const files={'index.js':starter,'totals.cjs':totals,'totals.test.cjs':starterTests,'README.md':'# '+name+'\n\nOpen this folder in Light Table. Edit index.js or totals.cjs, save, and press Ctrl+Shift+Enter to run.\n\nRun → Run file with Node uses real Node APIs. Run → npm scripts → test runs totals.test.cjs with Node\'s test runner; start runs index.js. Save project files before running npm. Native Node and short npm commands have a 30-second limit. Run → Install dependencies allows five minutes; Run → Development server → script allows fifteen minutes. All use the existing Node 24+ installation and project trust. Installation, short commands and development servers have a 1 GiB process-family limit. Run → Stop closes execution and server processes; Stop npm operation closes only the installer/server. Activity displays their output. When a development script prints its HTTP loopback URL, Run → Preview development server opens its saved app in the Browser preview tab with live updates. Closing the preview leaves the server running; Refresh preview reconnects.\n\nUse File → New file in project to add files and Refresh project files to reload the tree. No dependencies need installing for this starter.\n', 'package.json':JSON.stringify({name:name.toLowerCase().replace(/[^a-z0-9-]+/g,'-').replace(/^-|-$/g,'')||'javascript-project',version:'0.1.0',private:true,scripts:{start:'node index.js',test:'node --test totals.test.cjs'}},null,2)+'\n'};
   if(options.empty===true||template!=='javascript')for(const name of Object.keys(files))delete files[name];
+  if(template==='file')files[fileName]=/\.html?$/i.test(fileName)?'<!doctype html>\n<html lang="en">\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <title>'+name.replace(/&/g,'&amp;')+'</title>\n</head>\n<body>\n\n</body>\n</html>\n':'';
   if(template==='vite-react-tailwind')Object.assign(files,require('./revival-project-starters.cjs').files(template));
   for(const [file,content] of Object.entries(files)){const p=path.join(target,file),folder=path.dirname(p);if(!fs.existsSync(folder)){fs.mkdirSync(folder);createdFolders.push(folder);}fs.writeFileSync(p,content,{flag:'wx'});created.push(p);}
  }catch(error){for(const p of created)fs.unlinkSync(p);for(const folder of createdFolders.reverse())try{fs.rmdirSync(folder);}catch(_){}try{fs.rmdirSync(target);}catch(_){}throw error;}
- parents.delete(token);return activate(target);
+ parents.delete(token);return activate(target,fileName);
 }
 function reopen(input){const p=recents.find(r=>r.toLowerCase()===String(input).toLowerCase());if(!p)throw Error('Choose a project through Open project first.');return activate(p);}
-function newFile(name,expectedRoot){
+function newFile(name,expectedRoot,directory=current){
  if(!current)throw Error('Create or open a project first.');
  if(expectedRoot!==undefined){
   const changed='The active project changed in another window. Reopen this project before creating a file.';
@@ -71,7 +73,9 @@ function newFile(name,expectedRoot){
   const expected=path.resolve(expectedRoot),active=path.resolve(current),same=process.platform==='win32'?expected.toLowerCase()===active.toLowerCase():expected===active;
   if(!same)throw Error(changed);
  }
- validName(name);const p=policy.checked(path.join(current,name),true);
+ if(typeof directory!=='string'||!path.isAbsolute(directory)||directory.length>1024||directory.includes('\0'))throw Error('Choose a folder inside the active project.');
+ const relative=path.relative(current,path.resolve(directory));if(path.isAbsolute(relative)||relative==='..'||relative.startsWith('..'+path.sep))throw Error('Choose a folder inside the active project.');
+ validName(name);const p=policy.checked(path.join(directory,name),true);
  try{fs.writeFileSync(p,'',{flag:'wx'});}catch(error){if(error.code==='EEXIST')throw Error('That file already exists. Choose another name.');throw error;}
  return {path:p,project:identity(current)};
 }

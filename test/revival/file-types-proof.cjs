@@ -12,8 +12,10 @@ const sourceRoot=path.resolve(__dirname,'../..'),frozen=['deploy/core/revival-pr
 const hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex'),sourceBefore=frozen.map(file=>({path:file,sha256:hash(file)}));
 fs.writeFileSync(projects.statePath,JSON.stringify({current:null,recents:[]}));projects.load();
 const savePickerBefore=dialog.showSaveDialogSync;let picked=null,pickerOptions=null;
+const openPickerBefore=dialog.showOpenDialogSync;
+dialog.showOpenDialogSync=(window,options)=>options.title==='Choose where to create your project'?[root]:openPickerBefore(window,options);
 dialog.showSaveDialogSync=(window,options)=>{if(!picked)return savePickerBefore(window,options);pickerOptions=options;return picked;};
-const checks=[];let seen=false;const deadline=setTimeout(()=>app.exit(2),40000);
+const checks=[];let seen=false;const deadline=setTimeout(()=>app.exit(2),60000);
 app.on('browser-window-created',(_event,window)=>{if(seen)return;seen=true;window.setOpacity(0);window.setSkipTaskbar(true);window.showInactive();window.setSize(1000,720);window.webContents.once('did-finish-load',()=>setTimeout(async()=>{
  const ui=code=>window.webContents.executeJavaScript(code),check=(name,ok)=>{assert(ok,name);checks.push(name);console.error(name);};
  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),until=async predicate=>{const end=Date.now()+5000;while(!await predicate()){if(Date.now()>end)throw Error('File-type UI condition timed out');await sleep(25);}};
@@ -54,9 +56,17 @@ app.on('browser-window-created',(_event,window)=>{if(seen)return;seen=true;windo
   await ui('ltProjects.reopen('+JSON.stringify(root)+');void 0;');await menu('New file in project...');await field('project-file-name','recovered');await type('project-file','css');await field('project-file-name','recovered.CSS');await click('project-file-submit');current=await editor();check('Creating a selected type recovers with its recognized uppercase CSS extension',current.path===path.join(root,'recovered.CSS')&&current.mode==='css'&&fs.statSync(current.path).isFile());
   await menu('New file');await field('file-create-name','cancelled-transient');await type('file-create','custom');await field('file-create-extension','scene');await click('file-create-cancel');check('Cancelling the ordinary New file dialog leaves the active editor unchanged',JSON.stringify(await editor())===JSON.stringify(current));
   check('File-type controls stay in dialogs and leave Activity free of action controls',await ui('document.querySelectorAll("#proof-calculation button,#proof-calculation select").length===0'));
+  const nested=path.join(root,'nested');fs.mkdirSync(nested);await ui('ltProjects.refresh();void 0');await ui('lt.object.raise(lt.objs.sidebar.workspace.find_by_path('+JSON.stringify(nested)+'),cljs.core.keyword("new-file!"));void 0');await until(()=>ui('!!document.getElementById("project-file")'));
+  await field('project-file-name','nested-worker');await type('project-file','py');await click('project-file-submit');current=await editor();check('Workspace New file opens the type picker and creates only the selected file in that folder',current.path===path.join(nested,'nested-worker.py')&&current.mime==='text/x-python'&&fs.readdirSync(nested).length===1);
+  await menu('New project...');check('New project defaults to one HTML starting file and offers file types instead of scaffolds',await ui('document.getElementById("project-start-name").value==="index.html"&&document.getElementById("project-start-type").value==="html"&&!document.getElementById("project-template")'));
+  await sleep(150);fs.writeFileSync(path.join(policy.root,'single-file-project-dialog.png'),(await captureNativePage(window.webContents)).toPNG());
+  await field('project-create-name','html-project');await click('project-choose-location');await click('project-create-submit');current=await editor();check('Default new project contains only index.html and opens it with HTML grammar',current.path===path.join(root,'html-project','index.html')&&current.mode==='htmlmixed'&&JSON.stringify(fs.readdirSync(path.dirname(current.path)))===JSON.stringify(['index.html']));
+  await menu('New project...');await field('project-create-name','python-project');await field('project-start-name','main');await type('project-start','py');await click('project-choose-location');await click('project-create-submit');current=await editor();check('Selected Python project contains only main.py and opens it with Python grammar',current.path===path.join(root,'python-project','main.py')&&current.mime==='text/x-python'&&JSON.stringify(fs.readdirSync(path.dirname(current.path)))===JSON.stringify(['main.py']));
+  const projectBeforeCancel=projects.info().current.path;await menu('New project...');await field('project-create-name','cancel-project');await type('project-start','js');await click('project-choose-location');await click('project-create-cancel');check('Cancelling typed project creation makes no folder and retains the active project',!fs.existsSync(path.join(root,'cancel-project'))&&projects.info().current.path===projectBeforeCancel);
   result={passed:true,checks,root,sourceHashes:sourceBefore,screenshot:path.join(policy.root,'file-types-dialog.png')};
  } catch(error){console.error(error);result={passed:false,checks,root,error:error.stack};try{result.dialog=await ui('document.querySelector("dialog[open]")?.outerHTML');result.editor=await editor();}catch(_){} }
  dialog.showSaveDialogSync=savePickerBefore;
+ dialog.showOpenDialogSync=openPickerBefore;
  try {
   for(const name of ['revival-preview.cjs','revival-npm.cjs','revival-node.cjs','proof-js.cjs'])await require('../../deploy/core/'+name).shutdown();
   const memory=require('../../deploy/core/proof-js.cjs').diagnostics();assert.equal(memory.jobs,0);assert.equal(memory.pending,0);assert(!memory.helperPid);

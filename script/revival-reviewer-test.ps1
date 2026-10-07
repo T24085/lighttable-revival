@@ -8,7 +8,7 @@ if($LASTEXITCODE-ne 0){throw 'Reviewer controller checks failed'}
 $reviewerUnit | Set-Content -LiteralPath (Join-Path $reviewerEvidence 'reviewer-unit-result.json') -Encoding utf8
 $reviewerUIReceipt=Join-Path $reviewerEvidence 'reviewer-ui-result.json'
 if(Test-Path -LiteralPath $reviewerUIReceipt){Remove-Item -LiteralPath $reviewerUIReceipt}
-$reviewerUIProcess=Start-Process $reviewerElectron -ArgumentList ('"'+(Join-Path $reviewerSource 'test\revival\reviewer-ui-proof.cjs')+'"') -WindowStyle Hidden -PassThru
+$reviewerUIProcess=Start-Process $reviewerElectron -ArgumentList ('"'+(Join-Path $reviewerSource 'test\revival\reviewer-ui-proof.cjs')+'"'),'--force-device-scale-factor=1' -WindowStyle Hidden -PassThru
 $reviewerUIHandle=$reviewerUIProcess.Handle
 try{
  if(!$reviewerUIProcess.WaitForExit(50000)){Stop-Process -Id $reviewerUIProcess.Id;throw 'Owned reviewer UI proof exceeded its deadline'}
@@ -18,7 +18,7 @@ try{
 }finally{if(!$reviewerUIProcess.HasExited){Stop-Process -Id $reviewerUIProcess.Id}}
 $reviewerReceipt=Join-Path $reviewerEvidence 'reviewer-native-result.json'
 if(Test-Path -LiteralPath $reviewerReceipt){Remove-Item -LiteralPath $reviewerReceipt}
-$reviewerProcess=Start-Process $reviewerElectron -ArgumentList ('"'+(Join-Path $reviewerSource 'test\revival\reviewer-proof.cjs')+'"'),'--enable-logging' -WindowStyle Hidden -PassThru -RedirectStandardOutput ($reviewerReceipt+'-stdout.log') -RedirectStandardError ($reviewerReceipt+'-stderr.log')
+$reviewerProcess=Start-Process $reviewerElectron -ArgumentList ('"'+(Join-Path $reviewerSource 'test\revival\reviewer-proof.cjs')+'"'),'--enable-logging','--force-device-scale-factor=1' -WindowStyle Hidden -PassThru -RedirectStandardOutput ($reviewerReceipt+'-stdout.log') -RedirectStandardError ($reviewerReceipt+'-stderr.log')
 $reviewerHandle=$reviewerProcess.Handle
 try{
  if(!$reviewerProcess.WaitForExit(390000)){Stop-Process -Id $reviewerProcess.Id;throw 'Owned reviewer proof exceeded its deadline'}

@@ -50,11 +50,11 @@ window.ltProjects=(()=>{
  function newProject(){return safely(()=>{
   let parent=null;
   const ui=dialog('project-create','Create project','Project name','my-project',name=>{
-   const project=window.ltProjectFiles.create(parent?.token,name,{template:template.value});return ()=>{activate(project);if(template.value==='vite-react-tailwind')message('Vite + Tailwind created. Automatic live view will install dependencies and open the preview after project execution is allowed.');};
+   first.validate();const project=window.ltProjectFiles.create(parent?.token,name,{fileName:validFileName(first.input.value)});return ()=>{activate(project);message(first.input.value+' created.');};
   });
   ui.create.disabled=true;
-  const templateLabel=document.createElement('label'),template=document.createElement('select');template.id='project-template';templateLabel.htmlFor=template.id;templateLabel.textContent='Project template';
-  for(const [value,label]of [['javascript','JavaScript'],['vite-react-tailwind','Vite + React + Tailwind'],['empty','Empty project']]){const option=document.createElement('option');option.value=value;option.textContent=label;template.append(option);}ui.extra.append(templateLabel,template);
+  const firstLabel=document.createElement('label'),firstInput=document.createElement('input');firstInput.id='project-start-name';firstInput.value='index.html';firstInput.maxLength=80;firstInput.required=true;firstInput.autocomplete='off';firstLabel.htmlFor=firstInput.id;firstLabel.textContent='Starting file';ui.extra.append(firstLabel,firstInput);
+  const first={input:firstInput,extra:ui.extra,error:ui.error};fileTypeFields(first,'project-start');
   const location=document.createElement('p');location.id='project-location';location.textContent='Choose the folder where the new project will be created.';
   button('project-choose-location','Choose location…',()=>{
    try{ltProofUI.stop();const chosen=window.ltProjectFiles.pickParent();
@@ -68,11 +68,14 @@ window.ltProjects=(()=>{
   return name;
  }
  function fileDialog(id,defaultName,submit){
-  let chosenExtension='';
   const ui=dialog(id,'Create file','File name',defaultName,name=>{
-   if(type.value==='custom')extensionValue();
+   ui.validate();
    return submit(validFileName(name));
   });
+  fileTypeFields(ui,id);return ui;
+ }
+ function fileTypeFields(ui,id){
+  let chosenExtension='';
   const typeLabel=document.createElement('label'),type=document.createElement('select'),customLabel=document.createElement('label'),custom=document.createElement('input'),preview=document.createElement('p');
   type.id=id+'-type';typeLabel.htmlFor=type.id;typeLabel.textContent='File type';
   for(const [value,label] of fileTypes){const option=document.createElement('option');option.value=value;option.textContent=label;type.append(option);}
@@ -100,17 +103,17 @@ window.ltProjects=(()=>{
   }
   ui.input.addEventListener('input',readName);
   type.addEventListener('change',()=>{if(type.value==='custom')custom.value=chosenExtension;customVisibility();applyType();if(type.value==='custom'){custom.focus();custom.select();}});
-  custom.addEventListener('input',applyType);readName();return ui;
+  custom.addEventListener('input',applyType);ui.validate=()=>{if(type.value==='custom')extensionValue();return validFileName(ui.input.value);};readName();return ui;
  }
- function newFile(){return safely(()=>{
+ function newFile(directory){return safely(()=>{
   if(!info.current)throw Error('Create or open a project first.');
   const expectedRoot=info.current.path;
-  fileDialog('project-file','script.js',name=>{
-   const file=window.ltProjectFiles.newFile(name,expectedRoot);return ()=>{tree(file.project.path,true);openFile(file.path);message(name+' created.');};
+  fileDialog('project-file','untitled.html',name=>{
+   const file=window.ltProjectFiles.newFile(name,expectedRoot,directory);return ()=>{tree(file.project.path,true);openFile(file.path);message(name+' created.');};
   });
  });}
  function newUntitled(dirty=false){return safely(()=>{
-  fileDialog('file-create','untitled-'+(cljs.core.deref(lt.objs.opener.untitled_count)+1),name=>()=>{
+  fileDialog('file-create','untitled-'+(cljs.core.deref(lt.objs.opener.untitled_count)+1)+'.html',name=>()=>{
    lt.object.raise(lt.objs.opener.opener,cljs.core.keyword('new!'),null,!!dirty,name);
    ltProofUI.connect()?.focus();message(name+' created. Save to choose its location.');
   });
@@ -138,5 +141,5 @@ window.ltProjects=(()=>{
   `;document.head.append(style);
   safely(()=>{info=window.ltProjectFiles.info();showInfo();if(info.current)activate({...info.current,entry:null});else message(info.warning||'',!!info.warning);});
  }
- return {initialize,newProject,open,reopen,newFile,newUntitled,refresh,openedFolder:project=>safely(()=>activate({...project,entry:null})),info:()=>info};
+ return {initialize,newProject,open,reopen,newFile,newFileInFolder:newFile,newUntitled,refresh,openedFolder:project=>safely(()=>activate({...project,entry:null})),info:()=>info};
 })();

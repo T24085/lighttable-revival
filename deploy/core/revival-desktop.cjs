@@ -39,7 +39,7 @@ function operation(event,op,args){
   case 'project-create':return projects.create(args[0],args[1],args[2]||{});
   case 'project-open':{const chosen=dialog.showOpenDialogSync(window,{title:'Open project folder',defaultPath:projects.info().current?.path||app.getPath('documents'),properties:['openDirectory']});return chosen?.[0]?projects.activate(chosen[0]):null;}
   case 'project-reopen':return projects.reopen(args[0]);
-  case 'project-file':if(args.length!==2||typeof args[1]!=='string')throw Error('A displayed project is required to create a file.');return projects.newFile(args[0],args[1]);
+  case 'project-file':if(![2,3].includes(args.length)||typeof args[1]!=='string')throw Error('A displayed project is required to create a file.');return projects.newFile(args[0],args[1],args[2]);
   case 'dialog-open':{
    const directory=args[0]?.properties?.includes('openDirectory');
    const chosen=dialog.showOpenDialogSync(window,{defaultPath:policy.docs,properties:[directory?'openDirectory':'openFile','multiSelections']})||[];

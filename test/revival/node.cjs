@@ -36,7 +36,7 @@ const checks=[];async function check(name,fn){try{await fn();checks.push(name);}
   try{await assert.rejects(()=>node.run(101,{path:manifest,source:fs.readFileSync(manifest,'utf8'),script:'test'}),error=>error.logs.join('\n').includes('intentional failure')&&error.location?.path===testFile&&error.location.line===2);}finally{fs.writeFileSync(testFile,original);}
  });
  await check('A newly created project has working native start and test scripts',async()=>{
-  const starter=projects.create(projects.chooseParent(root).token,'starter-project'),file=path.join(starter.path,'package.json'),source=fs.readFileSync(file,'utf8');
+  const starter=projects.create(projects.chooseParent(root).token,'starter-project',{template:'javascript'}),file=path.join(starter.path,'package.json'),source=fs.readFileSync(file,'utf8');
   try{const test=await node.run(101,{path:file,source,script:'test'});assert.match(test.logs.join('\n'),/adds the project prices/);assert.match(test.logs.join('\n'),/handles discounts/);assert.equal(test.memory.processExited,true);const start=await node.run(101,{path:file,source,script:'start'});assert.match(start.logs.join('\n'),/Project is running/);}finally{projects.activate(root);}
  });
  await check('An actual npm build runs esbuild and its native child under the quota',async()=>{

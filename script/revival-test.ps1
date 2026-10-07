@@ -193,6 +193,9 @@ $assistantOutput=& $testNode (Join-Path $source 'test\revival\assistant.cjs')
 if($LASTEXITCODE-ne 0){throw 'Assistant streaming, tool schema, revisions, journal and lifecycle tests failed'}
 $assistantResult=($assistantOutput -join "`n" | ConvertFrom-Json)
 $assistantResult | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $runtime 'assistant-unit-result.json') -Encoding utf8
+$verificationOutput=& $testNode (Join-Path $source 'test\revival\assistant-verification.cjs')
+if($LASTEXITCODE-ne 0){throw 'Assistant source verification and coding recovery checks failed'}
+($verificationOutput -join "`n" | ConvertFrom-Json) | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $runtime 'assistant-verification-unit-result.json') -Encoding utf8
 $reviewerOutput=& $testNode (Join-Path $source 'test\revival\reviewer.cjs')
 if($LASTEXITCODE-ne 0){throw 'Reviewer transport and lifecycle checks failed'}
 $reviewerResult=($reviewerOutput -join "`n" | ConvertFrom-Json)
@@ -259,7 +262,7 @@ try {
 $reopen=Invoke-RevivalProof 'project-reopen-proof.cjs' 'project-reopen' 28000 'project-reopen-result.json'
 $openTargetsEditor=Invoke-RevivalProof 'open-targets-proof.cjs' 'open-targets-editor' 73000 'open-targets-editor-result.json'
 $saveEditor=Invoke-RevivalProof 'save-editor-proof.cjs' 'save-editor' 103000 'save-editor-result.json'
-$fileTypesEditor=Invoke-RevivalProof 'file-types-proof.cjs' 'file-types-editor' 43000 'file-types-editor-result.json'
+$fileTypesEditor=Invoke-RevivalProof 'file-types-proof.cjs' 'file-types-editor' 63000 'file-types-editor-result.json'
 $liveEditor=Invoke-RevivalProof 'live-editor-proof.cjs' 'live-editor' 107000 'live-editor-result.json'
 $legacyEditing=Invoke-RevivalProof 'legacy-editing-proof.cjs' 'legacy-editing' 107000 'legacy-editing-result.json'
 $hotView=Invoke-RevivalProof 'hot-view-proof.cjs' 'hot-view' 55000 'hot-view-result.json'

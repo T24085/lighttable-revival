@@ -7,7 +7,7 @@ fs.mkdirSync(root,{recursive:true});fs.writeFileSync(file,'const first = 1;\ncon
 const before=fs.existsSync(projects.statePath)?fs.readFileSync(projects.statePath):null;
 // Exercise the actual renderer/preload/controller path without borrowing a user's model.
 const uiRequests=[];let modelAbort,modelMode='stream';
-require(core+'/revival-assistant-ollama.cjs').create=()=>({models:async()=>[{name:'ui-fixture'}],show:async()=>({capabilities:['tools']}),chat:async(body,{signal,onChunk=()=>{}})=>{
+require(core+'/revival-assistant-ollama.cjs').create=()=>({models:async()=>[{name:'ui-fixture'},{name:'decision-fixture',digest:'fixture',size:1}],show:async name=>({capabilities:name==='decision-fixture'?['decision']:['tools']}),chat:async(body,{signal,onChunk=()=>{}})=>{
  uiRequests.push(body);
  if(modelMode==='command'){modelMode='stream';return {message:{role:'assistant',content:'Starting a foreground command',tool_calls:[{function:{name:'run_command',arguments:{command:'node -e "console.log(\'UI WAITING\');setInterval(()=>{},1000)"'}}}]}};}
  modelAbort=signal;onChunk({content:'Streaming from the native UI fixture…'});return new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}));

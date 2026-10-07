@@ -262,7 +262,9 @@
 (behavior ::new-file!
           :triggers #{:new-file!}
           :reaction (fn [this]
-                      (let [ext (if-let [ffile (-> @this :files first)]
+                      (if (and (exists? js/ltProjects) (.-newFileInFolder js/ltProjects))
+                        (.newFileInFolder js/ltProjects (:path @this))
+                        (let [ext (if-let [ffile (-> @this :files first)]
                                   (when-let [path (-> ffile deref :path)] (files/ext path))
                                   "txt")
                             path (files/join (:path @this) (str "untitled." ext))
@@ -272,7 +274,7 @@
                         (object/merge! this {:open? true})
                         (files/save final-path "")
                         (object/raise opener/opener :open! final-path)
-                        (object/raise folder :start-rename!))))
+                        (object/raise folder :start-rename!)))))
 
 (behavior ::new-folder!
           :triggers #{:new-folder!}
@@ -648,7 +650,7 @@
                       (open-file))})
 
 (cmd/command {:command :project.new
-              :desc "Project: Create a new JavaScript project"
+              :desc "Project: Create a project with one starting file"
               :exec (fn [] (.newProject js/ltProjects))})
 
 (cmd/command {:command :project.open
