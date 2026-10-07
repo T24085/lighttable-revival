@@ -20,6 +20,7 @@ function outcome(command,cwd,{exitCode,stdout,stderr}){
  return null;
 }
 function failureKey(name,args,value){
+ if(value.code==='LT_TOOL_ARGUMENTS')return JSON.stringify([name,value.code,value.error]);
  if(name==='check_preview'&&value.code==='LT_PREVIEW_JAVASCRIPT')return JSON.stringify([name,value.code]);
  if(name==='run_command'&&value.code?.startsWith('LT_'))return JSON.stringify([name,args?.cwd||'.',value.code]);
  const normalized=name==='run_command'?{...args,command:String(args?.command||'').replace(/\r\n/g,'\n').trim()}:args;

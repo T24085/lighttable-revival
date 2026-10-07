@@ -6,9 +6,30 @@ const {captureNativePage}=require('./native-page-capture.cjs'),base=path.join(po
 fs.mkdirSync(root,{recursive:true});fs.writeFileSync(file,'const first = 1;\nconst watched = 2;\nconst last = 3;\n');fs.writeFileSync(html,'<h1>Before assistant</h1><script>console.log("preview ready")</script>');
 const before=fs.existsSync(projects.statePath)?fs.readFileSync(projects.statePath):null;
 // Exercise the actual renderer/preload/controller path without borrowing a user's model.
-const uiRequests=[];let modelAbort,modelMode='stream';
+const uiRequests=[];let modelAbort,modelMode='stream',repairStep=0,newPageStep=0;
+const repairFile=path.join(root,'recovery.html'),recoveryClient=require(core+'/revival-assistant-ollama.cjs').create();let repairContent='<h1>Saved after argument recovery</h1>',aboutContent='<!doctype html><html><title>About the Founder | Nubs and Clubs</title><a href="index.html">Home</a><a href="about.html">About</a><h1>About the Owner</h1></html>',aboutRequest="add an about page about the owner and his little nubs and clubs.";if(process.env.LT_ASSISTANT_RECOVERY_SESSION){const history=JSON.parse(fs.readFileSync(process.env.LT_ASSISTANT_RECOVERY_SESSION,'utf8')),originalCall=history.messages.flatMap(m=>m.tool_calls||[]).findLast(c=>c.function?.name==='write_file'&&typeof c.function.arguments?.content==='string');assert(originalCall);repairContent=originalCall.function.arguments.content;aboutContent=repairContent;aboutRequest=history.latestRequest;}fs.writeFileSync(repairFile,'<h1>Original recovery fixture</h1>');
+const aboutFolder=path.join(root,'golf-course-website'),aboutFile=path.join(aboutFolder,'about.html'),aboutHome=path.join(aboutFolder,'index.html'),aboutHomeContent='<title>Nubs and Clubs</title><h1>Unchanged home page</h1>';fs.mkdirSync(aboutFolder);fs.writeFileSync(aboutHome,aboutHomeContent);
 require(core+'/revival-assistant-ollama.cjs').create=()=>({models:async()=>[{name:'ui-fixture'},{name:'decision-fixture',digest:'fixture',size:1}],show:async name=>({capabilities:name==='decision-fixture'?['decision']:['tools']}),chat:async(body,{signal,onChunk=()=>{}})=>{
  uiRequests.push(body);
+ if(body.format){const creating=modelMode==='new-page';assert(!body.tools);assert(!JSON.stringify(body).includes(creating?aboutContent:repairContent));if(creating){const context=JSON.parse(body.messages[1].content);assert(context.project.pages.some(p=>p.path===aboutHome&&p.title==='Nubs and Clubs'));assert(!fs.existsSync(aboutFile));}else assert(body.format.properties.path.enum.includes(repairFile));result[creating?'newPageRequestCharacters':'destinationRequestCharacters']=JSON.stringify(body).length;const selected=process.env.LT_ASSISTANT_RECOVERY_MODEL;if(selected){const started=Date.now(),answer=await recoveryClient.chat({...body,model:selected},{signal});result[creating?'realNewPageRecovery':'realDestinationRecovery']={model:selected,elapsedMs:Date.now()-started,receipt:answer.receipt,response:answer.message.content};return answer;}return {message:{role:'assistant',content:JSON.stringify({path:creating?aboutFile:repairFile})}};}
+ if(modelMode==='repair'){
+  const step=repairStep++;let name,args;
+  if(step===0){name='read_file';args={path:repairFile};}
+  else if(step===1){name='write_file';args={content:repairContent};}
+  else if(step===2){assert.equal(fs.readFileSync(repairFile,'utf8'),repairContent);await window.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');result.recoveryViewport=await window.webContents.executeJavaScript('({width:innerWidth,height:innerHeight})');result.recoveryHostContent=window.getContentSize();name='start_preview';args={path:repairFile};}
+  else if(step===3){name='inspect_preview';args={};}
+  else modelMode='stream';
+  if(name)return {message:{role:'assistant',content:'',tool_calls:[{function:{name,arguments:args}}]}};
+ }
+
+ if(modelMode==='new-page'){
+  const step=newPageStep++;let name,args;
+  if(step===0){name='write_file';args={content:aboutContent};}
+  else if(step===1){assert.equal(fs.readFileSync(aboutFile,'utf8'),aboutContent);assert.equal(fs.readFileSync(aboutHome,'utf8'),aboutHomeContent);await window.webContents.executeJavaScript('new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');name='start_preview';args={path:aboutFile};}
+  else if(step===2){name='inspect_preview';args={};}
+  else modelMode='stream';
+  if(name)return {message:{role:'assistant',content:'',tool_calls:[{function:{name,arguments:args}}]}};
+ }
  if(modelMode==='command'){modelMode='stream';return {message:{role:'assistant',content:'Starting a foreground command',tool_calls:[{function:{name:'run_command',arguments:{command:'node -e "console.log(\'UI WAITING\');setInterval(()=>{},1000)"'}}}]}};}
  modelAbort=signal;onChunk({content:'Streaming from the native UI fixture…'});return new Promise((_resolve,reject)=>signal.addEventListener('abort',()=>reject(signal.reason),{once:true}));
 }});
@@ -55,6 +76,22 @@ app.on('browser-window-created',(_event,host)=>{if(seen)return;seen=true;window=
   const previous=uiRequests.length;await ui('document.getElementById("assistant-input").value="Use my custom context";ltAssistantUI.send();');await until(()=>uiRequests.length>previous);assert.equal(uiRequests.at(-1).options.num_ctx,24576);
   await ui('document.getElementById("assistant-stop").click();void 0;');await until(()=>ui('ltAssistantUI.state().state.status==="stopped"&&document.getElementById("assistant-stop").hidden'));
   await ui('document.getElementById("assistant-context-label").click();document.getElementById("assistant-context-preset").value="65536";document.getElementById("assistant-context-preset").dispatchEvent(new Event("change"));document.querySelector("#assistant-settings form").requestSubmit();void 0;');await until(()=>ui('!document.getElementById("assistant-settings")'));assert.equal(backend.assistant.store.settings().contextTokens,65536);
+ });
+ await check('Native Chat repairs a missing write path, saves through the editor and shows the actual updated preview',async()=>{
+  modelMode='repair';repairStep=0;await ui('ltAssistantUI.action("new");');await ui('document.getElementById("assistant-input").value="Save and preview the recovery fixture";ltAssistantUI.send();');
+  await until(()=>repairStep===5,90000);const state=backend.assistant.runtime.state(),saved=backend.assistant.runtime.load(state.sessionId);
+  assert.equal(fs.readFileSync(repairFile,'utf8'),repairContent);assert.deepEqual(saved.unresolvedFileActions,[]);assert.equal(saved.journal.filter(e=>e.status==='saved'&&e.path===repairFile).length,1);
+  const failure=saved.events.find(e=>e.type==='tool-result'&&e.result.code==='LT_TOOL_ARGUMENTS');assert(failure);assert.match(failure.result.recovery,/saved nothing/);
+  const displayed=(await backend.assistant.preview.inspect({owner:host.webContents.id})).dom.text;assert(process.env.LT_ASSISTANT_RECOVERY_SESSION?/Nubs/i.test(displayed):displayed.includes('Saved after argument recovery'));
+  assert(await ui('document.getElementById("assistant-history").textContent.includes("Missing path")'));assert(saved.events.some(e=>e.type==='write-recovery'));result.recovery={saved:true,previewVerified:true,malformedCallRejected:true,contentCharacters:repairContent.length,contentSha256:crypto.createHash('sha256').update(repairContent).digest('hex'),simulatedCodingModel:true,realDestinationModel:process.env.LT_ASSISTANT_RECOVERY_MODEL||null};
+  await ui('document.getElementById("assistant-stop").click();void 0;');await until(()=>backend.assistant.runtime.activeCount()===0);await until(()=>ui('ltAssistantUI.state().state.status==="stopped"&&document.getElementById("assistant-stop").hidden'));await ui('lt.objs.command.exec_BANG_(cljs.core.keyword("open-path"),'+JSON.stringify(file)+');void 0;');
+ });
+ await check('Native Chat creates and previews a new About page without prior reads or replacing the home page',async()=>{
+  modelMode='new-page';newPageStep=0;await ui('ltAssistantUI.action("new");');await ui('document.getElementById("assistant-input").value='+JSON.stringify(aboutRequest)+';ltAssistantUI.send();');
+  await until(()=>newPageStep===4,90000);const saved=backend.assistant.runtime.load(backend.assistant.runtime.state().sessionId);
+  assert.equal(fs.readFileSync(aboutFile,'utf8'),aboutContent);assert.equal(fs.readFileSync(aboutHome,'utf8'),aboutHomeContent);assert.deepEqual(saved.unresolvedFileActions,[]);assert.equal(saved.journal.filter(e=>e.status==='saved').length,1);assert.equal(saved.journal[0].path,aboutFile);assert.equal(saved.journal[0].before.disk.exists,false);
+  const selection=saved.events.find(e=>e.type==='write-recovery'&&e.operation==='create');assert(selection);assert.equal(selection.path,aboutFile);assert(!saved.messages.some(m=>m.tool_name==='read_file'));const displayed=(await backend.assistant.preview.inspect({owner:host.webContents.id})).dom.text;assert(/About the (?:Owner|Founder)/i.test(displayed));result.newPageRecovery={saved:true,previewVerified:true,homeUnchanged:true,noPriorRead:true,contentCharacters:aboutContent.length,contentSha256:crypto.createHash('sha256').update(aboutContent).digest('hex'),simulatedCodingModel:true,realDestinationModel:process.env.LT_ASSISTANT_RECOVERY_MODEL||null};
+  await ui('document.getElementById("assistant-stop").click();void 0;');await until(()=>backend.assistant.runtime.activeCount()===0);await until(()=>ui('ltAssistantUI.state().state.status==="stopped"&&document.getElementById("assistant-stop").hidden'));await ui('lt.objs.command.exec_BANG_(cljs.core.keyword("open-path"),'+JSON.stringify(file)+');void 0;');
  });
  await check('The visible chat Stop button terminates an actual foreground process family',async()=>{
   modelMode='command';await ui('document.getElementById("assistant-input").value="Start command";ltAssistantUI.send();');await until(()=>backend.assistant.commands.diagnostics().active.some(c=>c.stdout.includes('UI WAITING')),30000);assert(await ui('document.getElementById("assistant-history").textContent.includes("Streaming from the native UI fixture")'));

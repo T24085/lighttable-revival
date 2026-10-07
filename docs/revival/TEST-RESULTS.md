@@ -1,4 +1,6 @@
-Current follow-up: [HTML viewer repair — 2026-10-06](HTML-VIEWER-REPAIR-2026-10-06.md).
+Current follow-up: [Assistant argument recovery, working context and new About-page recovery — 2026-10-07](ASSISTANT-RECOVERY-2026-10-07.md). Focused validation passed 167 checks, including real installed-model destination selection and actual Electron saving/previewing in a disposable project. Full real-model task completion and the broader regression were not rerun.
+
+Earlier viewer repair: [HTML viewer repair — 2026-10-06](HTML-VIEWER-REPAIR-2026-10-06.md).
 
 Earlier reviewer repair: [Reviewer profile migration repair — 2026-10-06](REVIEWER-PROFILE-REPAIR-2026-10-06.md).
 
